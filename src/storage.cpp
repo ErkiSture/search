@@ -18,6 +18,7 @@ namespace {
 		return std::to_string(h) + ".txt";
 	}
 
+	fs::path pages_path;
 	fs::path visited_path;
 	fs::path index_path;
 }
@@ -30,8 +31,13 @@ void init_storage(const fs::path& dataDir)
 		fs::create_directories(g_dataDir);
 	}
 
+	pages_path = fs::path(g_dataDir) / "pages";
 	visited_path = fs::path(g_dataDir) / "manifest.txt";
 	index_path = fs::path(g_dataDir) / "index.txt";
+
+	if (!fs::exists(pages_path)) {
+		fs::create_directories(pages_path);
+	}
 }
 
 void savePage(const std::string& url, const std::string& text)
@@ -41,7 +47,7 @@ void savePage(const std::string& url, const std::string& text)
 		return;
 	}
 
-	fs::path filepath = fs::path(g_dataDir) / url_to_filename(url);
+	fs::path filepath = fs::path(pages_path) / url_to_filename(url);
 
 	std::ofstream file(filepath);
 	if (!file) {
@@ -63,7 +69,7 @@ void savePage(const std::string& url, const std::string& text)
 
 std::string loadPage(const std::string& url)
 {
-	fs::path filepath = g_dataDir / url_to_filename(url);
+	fs::path filepath = pages_path / url_to_filename(url);
 	std::ifstream file(filepath);
 	if (!file) {
 		std::cerr << "failed to open file: " << filepath << '\n';
@@ -107,13 +113,13 @@ Index loadIndex() {
 		std::stringstream ss(line);
 
 		std::string word;
-		ss >> word;              // first token on the line = the word
+		ss >> word;
 
 		std::string entry;
-		while (ss >> entry) {    // every remaining token = "url:count"
-			size_t colon = entry.rfind(':');   // last colon, since URLs contain ':' too
+		while (ss >> entry) {
+			size_t colon = entry.rfind(':');
 			if (colon == std::string::npos)
-				continue;         // malformed entry — skip rather than crash
+				continue;
 
 			std::string url = entry.substr(0, colon);
 			std::string count_str = entry.substr(colon + 1);
@@ -131,9 +137,7 @@ std::unordered_set<std::string> loadVisitedUrls()
 	std::unordered_set<std::string> urls;
 	std::ifstream manifest(visited_path);
 
-	if (!manifest)
-	{
-		std::cerr << "Failed to open manifest\n";
+	if (!manifest){
 		return urls;
 	}
 

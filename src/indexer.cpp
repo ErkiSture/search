@@ -36,7 +36,7 @@ Index build_index_from_storage(){
 	}
 
 	saveIndex(index);
-	print_index(index);
+	//print_index(index);
 
 	return index;
 }
