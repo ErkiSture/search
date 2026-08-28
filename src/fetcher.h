@@ -1,4 +1,9 @@
 #pragma once
 #include <string>
 
-std::string fetch_url(const std::string& url);
+struct FetchResult {
+    bool success;
+    std::string data;
+};
+
+FetchResult fetch_url(const std::string& url);

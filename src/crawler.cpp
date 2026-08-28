@@ -55,7 +55,14 @@ void Crawler::worker()
 
         auto start = std::chrono::high_resolution_clock::now();
 
-        std::string html = fetch_url(url);
+        FetchResult result = fetch_url(url);
+        if (!result.success) {
+            lock.lock();
+            activeWorkers--;
+            lock.unlock();
+            cv_.notify_all();
+            continue;
+        }
 
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -68,17 +75,10 @@ void Crawler::worker()
         lock.lock();
         sumFetchTime_ += duration.count();
 
-        if (html.empty()) {
-            lock.unlock();
-            activeWorkers--;
-            cv_.notify_all();
-            continue;
-        }
-
-        std::string text = strip_html(html);
+        std::string text = strip_html(result.data);
         storage_.savePage(url, text);
 
-        for (const std::string& link : extract_links(html, url)) {
+        for (const std::string& link : extract_links(result.data, url)) {
             if (!visited_.count(link))
                 frontier_.push(link);
         }

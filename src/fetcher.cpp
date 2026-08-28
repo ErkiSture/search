@@ -2,16 +2,16 @@
 #include <curl/curl.h>
 #include <iostream>
 
-size_t write_callback(char* ptr, size_t size, size_t nmemb, std::string* data) {
-    data->append(ptr, size * nmemb);
+size_t write_callback(char* ptr, size_t size, size_t nmemb, std::string* response) {
+    response->append(ptr, size * nmemb);
     return size * nmemb;
 }
 
-std::string fetch_url(const std::string& url) {
+FetchResult fetch_url(const std::string& url) {
     CURL* curl = curl_easy_init();
     if (!curl) {
         std::cerr << "Failed to init curl\n";
-        return "";
+        return { false, "" };
     }
 
     std::string response;
@@ -27,9 +27,9 @@ std::string fetch_url(const std::string& url) {
     if (res != CURLE_OK) {
         std::cerr << "curl error: " << curl_easy_strerror(res) << '\n';
         curl_easy_cleanup(curl);
-        return "";
+        return { false, "" };
     }
 
     curl_easy_cleanup(curl);
-    return response;
+    return { true, response };
 }
