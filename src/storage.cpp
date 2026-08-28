@@ -6,48 +6,39 @@
 #include<fstream>
 #include<sstream>
 
+// turns a URL into a safe, unique filename
+std::string url_to_filename(const std::string& url)
+{
+	size_t h = std::hash<std::string>{}(url);
+	return std::to_string(h) + ".txt";
+}
+
 namespace fs = std::filesystem;
 
-namespace {
-	fs::path g_dataDir;
+Storage::Storage(const fs::path& dataDir) {
+	g_dataDir_ = dataDir;
 
-	// turns a URL into a safe, unique filename
-	std::string url_to_filename(const std::string& url) 
-	{
-		size_t h = std::hash<std::string>{}(url);
-		return std::to_string(h) + ".txt";
+	if (!fs::exists(g_dataDir_)) {
+		fs::create_directories(g_dataDir_);
 	}
 
-	fs::path pages_path;
-	fs::path visited_path;
-	fs::path index_path;
-}
+	pages_path_ = fs::path(g_dataDir_) / "pages";
+	visited_path_ = fs::path(g_dataDir_) / "manifest.txt";
+	index_path_ = fs::path(g_dataDir_) / "index.txt";
 
-void init_storage(const fs::path& dataDir)
-{
-	g_dataDir = dataDir;
-
-	if (!fs::exists(g_dataDir)) {
-		fs::create_directories(g_dataDir);
-	}
-
-	pages_path = fs::path(g_dataDir) / "pages";
-	visited_path = fs::path(g_dataDir) / "manifest.txt";
-	index_path = fs::path(g_dataDir) / "index.txt";
-
-	if (!fs::exists(pages_path)) {
-		fs::create_directories(pages_path);
+	if (!fs::exists(pages_path_)) {
+		fs::create_directories(pages_path_);
 	}
 }
 
-void savePage(const std::string& url, const std::string& text)
+void Storage::savePage(const std::string& url, const std::string& text)
 {
-	if (g_dataDir.empty()) {
+	if (g_dataDir_.empty()) {
 		std::cerr << "init_storage() was never called\n";
 		return;
 	}
 
-	fs::path filepath = fs::path(pages_path) / url_to_filename(url);
+	fs::path filepath = fs::path(pages_path_) / url_to_filename(url);
 
 	std::ofstream file(filepath);
 	if (!file) {
@@ -57,7 +48,7 @@ void savePage(const std::string& url, const std::string& text)
 	file << text;
 	file.close();
 
-	std::ofstream manifest(visited_path, std::ios::app);
+	std::ofstream manifest(visited_path_, std::ios::app);
 
 	if (!manifest) {
 		std::cerr << "failed to open manifest\n";
@@ -67,9 +58,9 @@ void savePage(const std::string& url, const std::string& text)
 	manifest << url << "\n";
 }
 
-std::string loadPage(const std::string& url)
+std::string Storage::loadPage(const std::string& url)
 {
-	fs::path filepath = pages_path / url_to_filename(url);
+	fs::path filepath = pages_path_ / url_to_filename(url);
 	std::ifstream file(filepath);
 	if (!file) {
 		std::cerr << "failed to open file: " << filepath << '\n';
@@ -81,12 +72,12 @@ std::string loadPage(const std::string& url)
 	return ss.str();
 }
 
-void saveIndex(const Index& index)
+void Storage::saveIndex(const Index& index)
 {
-	std::ofstream out(index_path);
+	std::ofstream out(index_path_);
 
 	if (!out) {
-		std::cerr << "failed to open file: " << index_path << "\n";
+		std::cerr << "failed to open file: " << index_path_ << "\n";
 		return;
 	}
 
@@ -99,12 +90,12 @@ void saveIndex(const Index& index)
 	}
 }
 
-Index loadIndex() {
+Index Storage::loadIndex() {
 	Index index;
-	std::ifstream in(index_path);
+	std::ifstream in(index_path_);
 
 	if (!in) {
-		std::cerr << "failed to open " << index_path << " for reading\n";
+		std::cerr << "failed to open " << index_path_ << " for reading\n";
 		return index;   // empty index if nothing's been built/saved yet
 	}
 
@@ -132,12 +123,12 @@ Index loadIndex() {
 	return index;
 }
 
-std::unordered_set<std::string> loadVisitedUrls()
+std::unordered_set<std::string> Storage::loadVisitedUrls()
 {
 	std::unordered_set<std::string> urls;
-	std::ifstream manifest(visited_path);
+	std::ifstream manifest(visited_path_);
 
-	if (!manifest){
+	if (!manifest) {
 		return urls;
 	}
 

@@ -5,7 +5,9 @@
 #include<sstream>
 #include<iostream>
 
-void print_index(const Index& index) {
+Indexer::Indexer(Storage& storage) : storage_(storage) {}
+
+void Indexer::print_index(const Index& index) {
 	std::cout << "INDEX:" << "\n";
 
 	for (const auto& [key, value] : index) {
@@ -19,13 +21,13 @@ void print_index(const Index& index) {
 	}
 }
 
-Index build_index_from_storage(){
+Index Indexer::build_index_from_storage(){
 	Index index;
 
-	std::unordered_set visisted_urls = loadVisitedUrls();
+	std::unordered_set<std::string> visisted_urls = storage_.loadVisitedUrls();
 
 	for (std::string url : visisted_urls) {
-		std::string page = loadPage(url);
+		std::string page = storage_.loadPage(url);
 
 		std::stringstream ss(page);
 		std::string word;
@@ -35,7 +37,7 @@ Index build_index_from_storage(){
 		}
 	}
 
-	saveIndex(index);
+	storage_.saveIndex(index);
 	//print_index(index);
 
 	return index;

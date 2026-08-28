@@ -10,12 +10,14 @@
 #include<chrono>
 #include<mutex>
 #include<condition_variable>
+#include"indexer.h"
 
 std::mutex m;
 std::condition_variable cv;
 
 void worker_fetch
 (
+    Storage& storage,
     std::queue<std::string>& frontier,
     std::unordered_set<std::string>& visited,
     int max_pages,
@@ -66,7 +68,7 @@ void worker_fetch
         }
 
         std::string text = strip_html(html);
-        savePage(url, text);
+        storage.savePage(url, text);
 
         for (const std::string& link : extract_links(html, url)) {
             if (!visited.count(link))
@@ -79,25 +81,24 @@ void worker_fetch
     }
 }
 
-void run_crawler_2(const std::string& seed_url, int max_pages) {
-    std::unordered_set<std::string> visited = loadVisitedUrls();
+void run_crawler_2(Storage& storage, const std::string& seed_url, int max_pages) {
+    std::unordered_set<std::string> visited = storage.loadVisitedUrls();
 
     std::queue<std::string> frontier;
     frontier.push(seed_url);
 
     int sum_fetch_time = 0;
-    bool finished = false;
 
     auto start = std::chrono::high_resolution_clock::now();
     std::cout << "--------------------" << "\n";
     std::cout << "CRAWL START" << "\n";
     std::cout << "--------------------" << "\n";
 
-    std::thread t1(worker_fetch, std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
-    std::thread t2(worker_fetch, std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
-    std::thread t3(worker_fetch, std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
-    std::thread t4(worker_fetch, std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
-    std::thread t5(worker_fetch, std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
+    std::thread t1(worker_fetch, std::ref(storage), std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
+    std::thread t2(worker_fetch, std::ref(storage), std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
+    std::thread t3(worker_fetch, std::ref(storage), std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
+    std::thread t4(worker_fetch, std::ref(storage), std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
+    std::thread t5(worker_fetch, std::ref(storage), std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
 
     t1.join();
     t2.join();
@@ -126,9 +127,10 @@ int main(int argc, char** argv) {
 	std::string seed_url = argv[1];
 	int max_pages = std::stoi(argv[2]);
 
-	init_storage("data");
-	run_crawler_2(seed_url, max_pages);
-	build_index_from_storage();
+    Storage storage("data");
+	run_crawler_2(storage, seed_url, max_pages);
+    Indexer indexer(storage);
+    indexer.build_index_from_storage();
 
 	std::cout << "Done. Crawled " << max_pages << " pages max.\n";
 
