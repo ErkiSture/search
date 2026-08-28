@@ -10,39 +10,46 @@
 #include<chrono>
 #include<mutex>
 #include<condition_variable>
-#include"indexer.h"
+#include<vector>
+#include"crawler.h"
 
-std::mutex m;
-std::condition_variable cv;
+Crawler::Crawler(Storage& storage, int maxPages, int workerCount) :
+    storage_(storage),
+    maxPages_(maxPages),
+    workerCount_(workerCount)
+{
+    visited_ = storage.loadVisitedUrls();
+}
 
-void worker_fetch
-(
-    Storage& storage,
-    std::queue<std::string>& frontier,
-    std::unordered_set<std::string>& visited,
-    int max_pages,
-    int& sum_fetch_time
-)
+void Crawler::worker()
 {
     while (true) {
-        std::unique_lock<std::mutex> lock(m);
+        std::unique_lock<std::mutex> lock(mutex_);
 
-        cv.wait(lock, [&] {
-            return !frontier.empty() || visited.size() >= max_pages;
+        cv_.wait(lock, [&] {
+            return !frontier_.empty() ||
+                visited_.size() >= maxPages_ ||
+                (frontier_.empty() && activeWorkers == 0);
             });
 
-        if (visited.size() >= max_pages) {
+        if (visited_.size() >= maxPages_) {
             break;
         }
 
-        std::string url = frontier.front();
-        frontier.pop();
+        if (frontier_.empty() && activeWorkers == 0) {
+            break;
+        }
 
-        if (visited.count(url)) {
+        std::string url = frontier_.front();
+        frontier_.pop();
+
+        if (visited_.count(url)) {
             continue;
         }
 
-        visited.insert(url);
+        visited_.insert(url);
+
+        activeWorkers++;
 
         lock.unlock();
 
@@ -59,64 +66,61 @@ void worker_fetch
             << ": " << duration.count() << " ms\n";
 
         lock.lock();
-        sum_fetch_time += duration.count();
+        sumFetchTime_ += duration.count();
 
         if (html.empty()) {
-            visited.insert(url);
             lock.unlock();
+            activeWorkers--;
+            cv_.notify_all();
             continue;
         }
 
         std::string text = strip_html(html);
-        storage.savePage(url, text);
+        storage_.savePage(url, text);
 
         for (const std::string& link : extract_links(html, url)) {
-            if (!visited.count(link))
-                frontier.push(link);
+            if (!visited_.count(link))
+                frontier_.push(link);
         }
 
+        activeWorkers--;
         lock.unlock();
 
-        cv.notify_all();
+        cv_.notify_all();
     }
 }
 
-void run_crawler_2(Storage& storage, const std::string& seed_url, int max_pages) {
-    std::unordered_set<std::string> visited = storage.loadVisitedUrls();
-
-    std::queue<std::string> frontier;
-    frontier.push(seed_url);
-
-    int sum_fetch_time = 0;
+void Crawler::run(const std::string& seedUrl) {
+    frontier_.push(seedUrl);
 
     auto start = std::chrono::high_resolution_clock::now();
     std::cout << "--------------------" << "\n";
     std::cout << "CRAWL START" << "\n";
     std::cout << "--------------------" << "\n";
 
-    std::thread t1(worker_fetch, std::ref(storage), std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
-    std::thread t2(worker_fetch, std::ref(storage), std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
-    std::thread t3(worker_fetch, std::ref(storage), std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
-    std::thread t4(worker_fetch, std::ref(storage), std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
-    std::thread t5(worker_fetch, std::ref(storage), std::ref(frontier), std::ref(visited), max_pages, std::ref(sum_fetch_time));
+    std::vector<std::thread> workers;
 
-    t1.join();
-    t2.join();
-    t3.join();
-    t4.join();
-    t5.join();
+    for (int i = 0; i < workerCount_; i++) {
+        workers.push_back(std::thread(&Crawler::worker, this));
+    }
+
+    for (auto& worker : workers) {
+        worker.join();
+    }
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         end - start
     );
 
-    std::cout << "total: " << sum_fetch_time << " ms" << "\n";
+    std::cout << "total: " << sumFetchTime_ << " ms" << "\n";
     std::cout << "--------------------" << "\n";
     std::cout << "CRAWL END, took " << duration.count() << " ms" << "\n";
     std::cout << "--------------------" << "\n";
 
 }
+
+constexpr int WORKER_COUNT = 3;
 
 int main(int argc, char** argv) {
 	if (argc < 3) {
@@ -124,15 +128,15 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	std::string seed_url = argv[1];
-	int max_pages = std::stoi(argv[2]);
+	std::string seedUrl = argv[1];
+	int maxPages = std::stoi(argv[2]);
 
     Storage storage("data");
-	run_crawler_2(storage, seed_url, max_pages);
+    Crawler crawler(storage, maxPages, WORKER_COUNT);
+	crawler.run(seedUrl);
     Indexer indexer(storage);
-    indexer.build_index_from_storage();
 
-	std::cout << "Done. Crawled " << max_pages << " pages max.\n";
+	std::cout << "Done. Crawled " << maxPages << " pages max.\n";
 
 	return 0;
 }
