@@ -6,13 +6,12 @@
 #include"storage.h"
 #include"indexer.h"
 #include"index.h"
-#include<unordered_set>
 #include<mutex>
-
+#include"domainManager.h"
 
 class Crawler {
 public:
-	explicit Crawler(Storage& storage, int maxPages, int workerCount);
+	explicit Crawler(Storage& storage, DomainManager& domainManager, int maxPages, int workerCount);
 
 	void run(const std::string& seedUrl);
 private:
@@ -27,6 +26,7 @@ private:
 	std::queue<std::string> frontier_;
 
 	Storage storage_;
+	DomainManager domainManager_;
 
 	int sumFetchTime_ = 0;
 

@@ -12,9 +12,11 @@
 #include<condition_variable>
 #include<vector>
 #include"crawler.h"
+#include"domainManager.h"
 
-Crawler::Crawler(Storage& storage, int maxPages, int workerCount) :
+Crawler::Crawler(Storage& storage, DomainManager& domainManager, int maxPages, int workerCount) :
     storage_(storage),
+    domainManager_(domainManager),
     maxPages_(maxPages),
     workerCount_(workerCount)
 {
@@ -24,6 +26,7 @@ Crawler::Crawler(Storage& storage, int maxPages, int workerCount) :
 void Crawler::worker()
 {
     while (true) {
+
         std::unique_lock<std::mutex> lock(mutex_);
 
         cv_.wait(lock, [&] {
@@ -40,6 +43,7 @@ void Crawler::worker()
             break;
         }
 
+        // Retrieve next URL
         std::string url = frontier_.front();
         frontier_.pop();
 
@@ -47,32 +51,104 @@ void Crawler::worker()
             continue;
         }
 
-        visited_.insert(url);
+        RequestStatus status = domainManager_.check(url);
 
+        if (status == RequestStatus::Disallowed) {
+            continue;
+        }
+
+        if (status == RequestStatus::Wait) {
+            frontier_.push(url);
+            lock.unlock();
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
+            continue;
+        }
+
+        // Fetch robots.txt
+        if (status == RequestStatus::FetchRobots) {
+            std::string robotsUrl = domainManager_.getRobotsUrl(url);
+
+            // Put original URL back for later
+            frontier_.push(url);
+            activeWorkers++;
+
+            lock.unlock();
+
+            std::cout << "fetching robots: " << robotsUrl << "\n";
+
+            auto start = std::chrono::high_resolution_clock::now();
+
+            FetchResult result = fetch_url(robotsUrl);
+
+            auto end = std::chrono::high_resolution_clock::now();
+
+            auto duration =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    end - start
+                );
+
+            std::cout << "robots fetch: "
+                << duration.count() << " ms\n";
+
+            lock.lock();
+
+            // Add robots fetch time
+            sumFetchTime_ += duration.count();
+
+            if (result.success) {
+                domainManager_.saveRobotsResult(robotsUrl, result.data);
+            }
+            else {
+                // Failed/missing robots.txt -> treat as empty
+                domainManager_.saveRobotsResult(robotsUrl, "");
+            }
+
+            activeWorkers--;
+
+            lock.unlock();
+            cv_.notify_all();
+            continue;
+        }
+
+        // Normal page fetch
+        visited_.insert(url);
         activeWorkers++;
+
+        // Reserve domain request time BEFORE fetching
+        domainManager_.saveRequest(url);
 
         lock.unlock();
 
         auto start = std::chrono::high_resolution_clock::now();
 
         FetchResult result = fetch_url(url);
+
+        auto end = std::chrono::high_resolution_clock::now();
+
+        auto duration =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                end - start
+            );
+
         if (!result.success) {
             lock.lock();
+
+            sumFetchTime_ += duration.count();
             activeWorkers--;
+
             lock.unlock();
             cv_.notify_all();
             continue;
         }
 
-        auto end = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-            end - start
-        );
-
-        std::cout << "thread " << std::this_thread::get_id()
+        std::cout << "thread "
+            << std::this_thread::get_id()
             << ": " << duration.count() << " ms\n";
 
         lock.lock();
+
+        // Handle fetch result
         sumFetchTime_ += duration.count();
 
         std::string text = strip_html(result.data);
@@ -80,12 +156,14 @@ void Crawler::worker()
 
         for (const std::string& link : extract_links(result.data, url)) {
             if (!visited_.count(link))
+            {
                 frontier_.push(link);
+            }
         }
 
         activeWorkers--;
-        lock.unlock();
 
+        lock.unlock();
         cv_.notify_all();
     }
 }
@@ -120,7 +198,7 @@ void Crawler::run(const std::string& seedUrl) {
 
 }
 
-constexpr int WORKER_COUNT = 3;
+constexpr int WORKER_COUNT = 4;
 
 int main(int argc, char** argv) {
 	if (argc < 3) {
@@ -132,7 +210,8 @@ int main(int argc, char** argv) {
 	int maxPages = std::stoi(argv[2]);
 
     Storage storage("data");
-    Crawler crawler(storage, maxPages, WORKER_COUNT);
+    DomainManager domainManager;
+    Crawler crawler(storage, domainManager, maxPages, WORKER_COUNT);
 	crawler.run(seedUrl);
     Indexer indexer(storage);
 

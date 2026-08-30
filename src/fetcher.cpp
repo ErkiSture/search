@@ -21,6 +21,7 @@ FetchResult fetch_url(const std::string& url) {
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "MyLearningCrawler/0.1 (contact: erik.j.d.berg@gmail.com)");
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L); // todo this did something
 
     CURLcode res = curl_easy_perform(curl);
 

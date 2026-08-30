@@ -25,6 +25,8 @@ add_executable(crawler
     src/storage.cpp
     src/fetcher.cpp
     src/html_parser.cpp
+    src/domainManager.cpp
+    src/robotsTxtParser.cpp
 )
 
 target_link_libraries(search PRIVATE CURL::libcurl)
