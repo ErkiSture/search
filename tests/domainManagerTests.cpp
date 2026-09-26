@@ -98,3 +98,33 @@ TEST(DomainManagerTest, sameDomain){
         "https://bar.example.com/page"
     ));
 }
+
+TEST(DomainManagerTest, UrlAllowed) {
+    DomainManager domainManager;
+
+    std::string domain = "https://example.com";
+    std::string robotsText =
+        "User-agent: *\n"
+        "Disallow: /private\n"
+        "Disallow: /admin\n"
+        "Allow: /private/public\n";
+
+    domainManager.saveRobotsResult(domain, robotsText);
+
+    // Test allow arbitrary urls
+    EXPECT_TRUE(domainManager.isAllowed("https://example.com/"));
+    EXPECT_TRUE(domainManager.isAllowed("https://example.com/test"));
+
+    // Test disallow
+    EXPECT_FALSE(domainManager.isAllowed("https://example.com/private"));
+    EXPECT_FALSE(domainManager.isAllowed("https://example.com/private1"));
+    EXPECT_FALSE(domainManager.isAllowed("https://example.com/private1/test"));
+    EXPECT_FALSE(domainManager.isAllowed("https://example.com/private1"));
+
+    // Test allow override
+    EXPECT_TRUE(domainManager.isAllowed("https://example.com/public"));
+    EXPECT_TRUE(domainManager.isAllowed("https://example.com/private/public"));
+    EXPECT_TRUE(domainManager.isAllowed("https://example.com/private/public1"));
+    EXPECT_TRUE(domainManager.isAllowed("https://example.com/private/public/test"));
+    EXPECT_TRUE(domainManager.isAllowed("https://example.com/private/public1/test"));
+}

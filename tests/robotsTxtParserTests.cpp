@@ -87,3 +87,16 @@ TEST(RobotsTxtParserTest, Whitespace)
     EXPECT_EQ(result.disallowed.size(), 1);
     EXPECT_EQ(result.disallowed[0], "/private");
 }
+
+TEST(RobotsTxtParserTest, AllowOverrideDisallow)
+{
+    RobotsRules result = parseRobots(
+        "User-agent: *\n"
+        "Disallow: /private\n"
+        "Allow: /private/admin\n"
+    );
+
+    EXPECT_EQ(result.disallowed.size(), 1);    
+    EXPECT_EQ(result.allowed.size(), 1);
+    EXPECT_EQ(result.allowed[0], "/private/admin");
+}

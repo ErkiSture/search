@@ -75,6 +75,7 @@ bool DomainManager::isAllowed(const std::string& url)
 		path = url.substr(pathStart);
 	}
 
+
 	size_t longestMatch = 0;
 	bool allowed = true;
 
