@@ -5,6 +5,10 @@
 
 int DEFAULT_DOMAIN_RATE_LIMIT_MS = 1000;
 
+/*
+* Looks of the domain status for the given url and returns a status describing 
+* if the url should be crawled. Alternatively if robots.txt should be fetched
+*/
 RequestStatus DomainManager::check(const std::string& url)
 {
 	std::string domain = getDomain(url);
@@ -48,6 +52,9 @@ RequestStatus DomainManager::check(const std::string& url)
 	return RequestStatus::Allowed;
 }
 
+/*
+* Checks if the given url is allowed to be crawled according to the domains robots.txt rules
+*/
 bool DomainManager::isAllowed(const std::string& url)
 {
 	std::string domain = getDomain(url);
@@ -99,6 +106,9 @@ bool DomainManager::isAllowed(const std::string& url)
 	return allowed;
 }
 
+/*
+* Updates the time for latest request on the given urls domain
+*/
 void DomainManager::saveRequest(const std::string& url)
 {
 	std::string domain = getDomain(url);
@@ -115,6 +125,9 @@ void DomainManager::saveRequest(const std::string& url)
 	state.lastRequest = std::chrono::steady_clock::now();	
 }
 
+/*
+* Saves the result of a request to a robots.txt site
+*/
 void DomainManager::saveRobotsResult(const std::string& url, const std::string& text)
 {
 	RobotsRules robotsRules = parseRobots(text);
@@ -132,6 +145,9 @@ void DomainManager::saveRobotsResult(const std::string& url, const std::string& 
 	domains_[domain] = domainState;
 }
 
+/*
+* Takes a url and returns the domain
+*/
 std::string DomainManager::getDomain(const std::string& url){
 	size_t schemeEnd = url.find("://");
 	if (schemeEnd == std::string::npos)
@@ -146,6 +162,9 @@ std::string DomainManager::getDomain(const std::string& url){
 	return url.substr(0, pathStart);
 }
 
+/*
+* Takes a url and returns the robots.txt url
+*/
 std::string DomainManager::getRobotsUrl(const std::string& url) {
 	size_t pos = url.find("://");
 
@@ -160,6 +179,9 @@ std::string DomainManager::getRobotsUrl(const std::string& url) {
 	return url.substr(0, pos) + "/robots.txt";
 }
 
+/*
+* Checks if two urls share the same domain
+*/
 bool DomainManager::sameDomain(const std::string& url1, const std::string& url2)
 {
 	return getDomain(url1) == getDomain(url2);

@@ -45,22 +45,23 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
-add_executable(domainManagerTests
+add_executable(tests
     tests/domainManagerTests.cpp
+    tests/robotsTxtParserTests.cpp
     src/domainManager.cpp
     src/robotsTxtParser.cpp
 )
 
-target_include_directories(domainManagerTests
+target_include_directories(tests
     PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(domainManagerTests
+target_link_libraries(tests
     PRIVATE
     GTest::gtest_main
 )
 
 
 include(GoogleTest)
-gtest_discover_tests(domainManagerTests)
+gtest_discover_tests(tests)
