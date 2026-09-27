@@ -3,7 +3,7 @@
 #include<iostream>
 #include"robotsTxtParser.h"
 
-int DEFAULT_DOMAIN_RATE_LIMIT_MS = 1000;
+int DEFAULT_DOMAIN_RATE_LIMIT_MS = 500;
 
 /*
 * Looks of the domain status for the given url and returns a status describing 
