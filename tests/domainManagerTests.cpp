@@ -191,8 +191,6 @@ TEST(DomainManagerTest, RequestToSameDomainWhileWaitingReturnsWait)
     EXPECT_EQ(domainManager.check("https://example.com/private"), RequestStatus::Wait);
 }
 
-
-
 class FakeClock : public Clock {
 public:
     FakeClock()
@@ -211,8 +209,6 @@ private:
     std::chrono::steady_clock::time_point time;
 };
 
-
-
 TEST(DomainManagerTest, RequestAfterSavedRobotsReturnsPermission)
 {
     FakeClock clock;
@@ -228,19 +224,19 @@ TEST(DomainManagerTest, RequestAfterSavedRobotsReturnsPermission)
     clock.advance(std::chrono::milliseconds(499));
     EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::Wait);
 
-    clock.advance(std::chrono::milliseconds(500));
+    clock.advance(std::chrono::milliseconds(1));
     EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::Allowed);
 }
 
-
-TEST(DomainManagerTest, FailedRobotsRequestMarksDomainAsFetched)
+TEST(DomainManagerTest, RequestToDomainWithEmptyRobotsShouldWork)
 {
-    SystemClock clock;
+    FakeClock clock;
     DomainManager domainManager(clock);
 
     domainManager.saveRobotsResult("https://example.com",
         "User-agent: *\n"
         "Disallow: /private\n"
     );
-
+    clock.advance(std::chrono::milliseconds(500));
+    EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::Allowed);
 }

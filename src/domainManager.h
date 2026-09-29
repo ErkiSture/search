@@ -14,8 +14,7 @@ enum class RequestStatus {
 
 class DomainManager{
 public:
-	explicit DomainManager(Clock& clock)
-		: clock(clock) 
+	explicit DomainManager(Clock& clock) : clock(clock)
 	{
 	};
 
@@ -42,6 +41,5 @@ private:
 	};
 
 	std::unordered_map<std::string, DomainState> domains_;
-
-	static constexpr auto DEFAULT_DOMAIN_RATE_LIMIT_MS = std::chrono::milliseconds(500);
+	static constexpr std::chrono::milliseconds DEFAULT_DOMAIN_RATE_LIMIT_MS = std::chrono::milliseconds(500);
 };
