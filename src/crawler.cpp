@@ -13,6 +13,7 @@
 #include<vector>
 #include"crawler.h"
 #include"domainManager.h"
+#include"systemClock.h"
 
 Crawler::Crawler(Storage& storage, DomainManager& domainManager, int maxPages, int workerCount) :
     storage_(storage),
@@ -210,7 +211,8 @@ int main(int argc, char** argv) {
 	int maxPages = std::stoi(argv[2]);
 
     Storage storage("data");
-    DomainManager domainManager;
+    SystemClock clock;
+    DomainManager domainManager(clock);
     Crawler crawler(storage, domainManager, maxPages, WORKER_COUNT);
 	crawler.run(seedUrl);
     Indexer indexer(storage);

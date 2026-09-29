@@ -3,6 +3,7 @@
 #include<string>
 #include<chrono>
 #include<unordered_map>
+#include"Clock.h"
 
 enum class RequestStatus {
 	Allowed,
@@ -13,8 +14,12 @@ enum class RequestStatus {
 
 class DomainManager{
 public:
-	RequestStatus check(const std::string& url);
+	explicit DomainManager(Clock& clock)
+		: clock(clock) 
+	{
+	};
 
+	RequestStatus check(const std::string& url);
 	bool isAllowed(const std::string& url);
 	void saveRequest(const std::string& url);
 	void saveRobotsResult(const std::string& url, const std::string& text);
@@ -22,6 +27,8 @@ public:
 	bool sameDomain(const std::string& url1, const std::string& url2);
 
 private:
+	Clock& clock;
+
 	std::string getDomain(const std::string& url);
 	struct DomainState {
 		bool loadedRobotsTxt;
@@ -35,4 +42,6 @@ private:
 	};
 
 	std::unordered_map<std::string, DomainState> domains_;
+
+	static constexpr auto DEFAULT_DOMAIN_RATE_LIMIT_MS = std::chrono::milliseconds(500);
 };

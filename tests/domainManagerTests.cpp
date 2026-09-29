@@ -1,8 +1,12 @@
 #include <gtest/gtest.h>
 #include "domainManager.h"
+#include "systemClock.h"
+#include <chrono>
 
-TEST(DomainManagerTest, getRobotsUrl){
-    DomainManager manager;
+TEST(DomainManagerTest, getRobotsUrl)
+{
+    SystemClock clock;
+    DomainManager manager(clock);
 
     EXPECT_EQ(
         "https://example.com/robots.txt",
@@ -50,8 +54,10 @@ TEST(DomainManagerTest, getRobotsUrl){
     );
 }
 
-TEST(DomainManagerTest, sameDomain){
-    DomainManager manager;
+TEST(DomainManagerTest, sameDomain)
+{
+    SystemClock clock;
+    DomainManager manager(clock);
 
     EXPECT_TRUE(manager.sameDomain(
         "https://example.com/page",
@@ -104,8 +110,10 @@ TEST(DomainManagerTest, sameDomain){
     ));
 }
 
-TEST(DomainManagerTest, AllowsUrlsNotMatchingDisallow) {
-    DomainManager domainManager;
+TEST(DomainManagerTest, AllowsUrlsNotMatchingDisallow)
+{
+    SystemClock clock;
+    DomainManager domainManager(clock);
 
     std::string domain = "https://example.com";
     std::string robotsText =
@@ -121,8 +129,10 @@ TEST(DomainManagerTest, AllowsUrlsNotMatchingDisallow) {
     EXPECT_TRUE(domainManager.isAllowed("https://example.com/public"));
 }
 
-TEST(DomainManagerTest, DisallowsMatchingUrls) {
-    DomainManager domainManager;
+TEST(DomainManagerTest, DisallowsMatchingUrls) 
+{
+    SystemClock clock;
+    DomainManager domainManager(clock);
 
     std::string domain = "https://example.com";
     std::string robotsText =
@@ -139,8 +149,10 @@ TEST(DomainManagerTest, DisallowsMatchingUrls) {
 }
 
 
-TEST(DomainManagerTest, AllowOverridesDisallow) {
-    DomainManager domainManager;
+TEST(DomainManagerTest, AllowOverridesDisallow) 
+{
+    SystemClock clock;
+    DomainManager domainManager(clock);
 
     std::string domain = "https://example.com";
     std::string robotsText =
@@ -158,7 +170,8 @@ TEST(DomainManagerTest, AllowOverridesDisallow) {
 
 TEST(DomainManagerTest, UnmatchingDomainReturnsFetchRobots)
 {
-    DomainManager domainManager;
+    SystemClock clock;
+    DomainManager domainManager(clock);
 
     EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::FetchRobots);
     EXPECT_EQ(domainManager.check("https://example.se"), RequestStatus::FetchRobots);
@@ -169,10 +182,65 @@ TEST(DomainManagerTest, UnmatchingDomainReturnsFetchRobots)
 
 TEST(DomainManagerTest, RequestToSameDomainWhileWaitingReturnsWait)
 {
-    DomainManager domainManager;
+    SystemClock clock;
+    DomainManager domainManager(clock);
 
     // Fetching from same domain immediately after first request to domain should signal waiting
     EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::FetchRobots);
     EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::Wait);
     EXPECT_EQ(domainManager.check("https://example.com/private"), RequestStatus::Wait);
+}
+
+
+
+class FakeClock : public Clock {
+public:
+    FakeClock()
+        : time(std::chrono::steady_clock::time_point{})
+    {
+    }
+
+    std::chrono::steady_clock::time_point now() const override {
+        return time;
+    }
+
+    void advance(std::chrono::milliseconds amount) {
+        time += amount;
+    }
+private:
+    std::chrono::steady_clock::time_point time;
+};
+
+
+
+TEST(DomainManagerTest, RequestAfterSavedRobotsReturnsPermission)
+{
+    FakeClock clock;
+    DomainManager domainManager(clock);
+
+    domainManager.saveRobotsResult("https://example.com",
+        "User-agent: *\n"
+        "Disallow: /private\n"
+    );
+
+    EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::Wait);    
+    
+    clock.advance(std::chrono::milliseconds(499));
+    EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::Wait);
+
+    clock.advance(std::chrono::milliseconds(500));
+    EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::Allowed);
+}
+
+
+TEST(DomainManagerTest, FailedRobotsRequestMarksDomainAsFetched)
+{
+    SystemClock clock;
+    DomainManager domainManager(clock);
+
+    domainManager.saveRobotsResult("https://example.com",
+        "User-agent: *\n"
+        "Disallow: /private\n"
+    );
+
 }
