@@ -1,7 +1,7 @@
-#include"indexer.h"
+#include"index/indexer.h"
 #include<unordered_set>
-#include"storage.h"
-#include"html_parser.h"
+#include"storage/storage.h"
+#include"parsing/htmlParser.h"
 #include<sstream>
 #include<iostream>
 

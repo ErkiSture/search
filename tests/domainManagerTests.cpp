@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "domainManager.h"
-#include "systemClock.h"
+#include "crawl/domainManager.h"
+#include "utils/systemClock.h"
 #include <chrono>
 
 TEST(DomainManagerTest, getRobotsUrl)

@@ -1,11 +1,11 @@
 #include<string>
-#include"storage.h"
+#include"storage/storage.h"
 #include<iostream>
-#include"indexer.h"
+#include"index/indexer.h"
 #include<queue>
-#include"fetcher.h"
-#include"html_parser.h"
-#include"link_extractor.h"
+#include"net/fetcher.h"
+#include"parsing/htmlParser.h"
+#include"parsing/linkExtractor.h"
 #include<thread>
 #include<chrono>
 #include<mutex>
@@ -13,7 +13,7 @@
 #include<vector>
 #include"crawler.h"
 #include"domainManager.h"
-#include"systemClock.h"
+#include"utils/systemClock.h"
 
 Crawler::Crawler(Storage& storage, DomainManager& domainManager, int maxPages, int workerCount) :
     storage_(storage),

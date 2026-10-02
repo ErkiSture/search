@@ -1,7 +1,7 @@
 #include"domainManager.h"
 #include<string>
 #include<iostream>
-#include"robotsTxtParser.h"
+#include"parsing/robotsTxtParser.h"
 
 /*
 * Looks of the domain status for the given url and returns a status describing 

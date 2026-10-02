@@ -5,8 +5,8 @@
 #include<sstream>
 #include<unordered_map>
 #include<vector>
-#include"fetcher.h"
-#include"html_parser.h" 
+#include"net/fetcher.h"
+#include"parsing/htmlParser.h" 
 
 namespace fs = std::filesystem;
 

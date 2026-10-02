@@ -14,19 +14,27 @@ find_package(CURL REQUIRED)
 
 add_executable(search
     src/main.cpp
-    src/fetcher.cpp
-    src/html_parser.cpp
+    "src/net/fetcher.cpp"
+    "src/parsing/htmlParser.cpp"
+)
+
+target_include_directories(search PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 add_executable(crawler
-    src/crawler.cpp
-    src/indexer.cpp
-    src/link_extractor.cpp
-    src/storage.cpp
-    src/fetcher.cpp
-    src/html_parser.cpp
-    src/domainManager.cpp
-    src/robotsTxtParser.cpp
+    "src/crawl/crawler.cpp"
+    "src/index/indexer.cpp"
+    "src/parsing/linkExtractor.cpp"
+    "src/storage/storage.cpp"
+    "src/net/fetcher.cpp"
+    "src/parsing/htmlParser.cpp"
+    "src/crawl/domainManager.cpp"
+    "src/parsing/robotsTxtParser.cpp"
+)
+
+target_include_directories(crawler PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_link_libraries(search PRIVATE CURL::libcurl)
@@ -48,12 +56,11 @@ enable_testing()
 add_executable(tests
     tests/domainManagerTests.cpp
     tests/robotsTxtParserTests.cpp
-    src/domainManager.cpp
-    src/robotsTxtParser.cpp
+    "src/crawl/domainManager.cpp"
+    "src/parsing/robotsTxtParser.cpp"
 )
 
-target_include_directories(tests
-    PRIVATE
+target_include_directories(tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 

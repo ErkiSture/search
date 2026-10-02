@@ -3,9 +3,9 @@
 #include<string>
 #include<unordered_set>
 #include<queue>
-#include"storage.h"
-#include"indexer.h"
-#include"index.h"
+#include"storage/storage.h"
+#include"index/indexer.h"
+#include"index/index.h"
 #include<mutex>
 #include"domainManager.h"
 
