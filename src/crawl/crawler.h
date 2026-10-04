@@ -8,16 +8,31 @@
 #include"index/index.h"
 #include<mutex>
 #include"domainManager.h"
+#include<optional>
+#include"utils/systemClock.h"
 
 class Crawler {
 public:
-	explicit Crawler(Storage& storage, DomainManager& domainManager, int maxPages, int workerCount);
-
+	explicit Crawler(
+		Storage& storage,
+		DomainManager& domainManager,
+		SystemClock& clock,
+		int maxPages,
+		int workerCount
+	);
 	void run(const std::string& seedUrl);
-private:
 
+private:
+	std::optional<std::string> Crawler::getNextUrl(std::unique_lock<std::mutex>& lock);
+	void Crawler::processUrl(std::string& url);
 	void worker();
 
+	void reQueueUrl(const std::string& url);
+	void fetchRobots(const std::string& url);
+	void fetchPage(const std::string& url);
+
+	// Prints a url along with how long the fetch took
+	void Crawler::logFetchTime(const std::string& url, std::chrono::steady_clock::time_point start);
 	int workerCount_ = 0;
 	int activeWorkers = 0;
 	int maxPages_;
@@ -27,6 +42,7 @@ private:
 
 	Storage storage_;
 	DomainManager domainManager_;
+	SystemClock clock_;
 
 	int sumFetchTime_ = 0;
 
