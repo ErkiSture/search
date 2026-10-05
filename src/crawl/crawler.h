@@ -10,6 +10,7 @@
 #include"domainManager.h"
 #include<optional>
 #include"utils/systemClock.h"
+#include"net/httpClient.h"
 
 class Crawler {
 public:
@@ -17,6 +18,7 @@ public:
 		Storage& storage,
 		DomainManager& domainManager,
 		SystemClock& clock,
+		HttpClient&,
 		int maxPages,
 		int workerCount
 	);
@@ -40,9 +42,10 @@ private:
 	std::unordered_set<std::string> visited_;
 	std::queue<std::string> frontier_;
 
-	Storage storage_;
-	DomainManager domainManager_;
-	SystemClock clock_;
+	Storage& storage_;
+	DomainManager& domainManager_;
+	SystemClock& clock_;
+	HttpClient& httpClient_;
 
 	int sumFetchTime_ = 0;
 

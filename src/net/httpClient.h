@@ -2,13 +2,13 @@
 
 #include<string>
 
-class IHttpClient {
+class HttpClient {
 
 public:
-    virtual fetchUrl(const std::string& url) const = 0;
-
     struct FetchResult {
         bool success;
         std::string data;
     };
+
+    virtual FetchResult fetchUrl(const std::string& url) const = 0;
 };

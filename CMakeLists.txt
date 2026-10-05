@@ -31,6 +31,7 @@ add_executable(crawler
     "src/parsing/htmlParser.cpp"
     "src/crawl/domainManager.cpp"
     "src/parsing/robotsTxtParser.cpp"
+    "src/net/curlHttpClient.cpp"
 )
 
 target_include_directories(crawler PRIVATE

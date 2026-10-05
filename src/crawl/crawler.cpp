@@ -3,7 +3,6 @@
 #include<iostream>
 #include"index/indexer.h"
 #include<queue>
-#include"net/fetcher.h"
 #include"parsing/htmlParser.h"
 #include"parsing/linkExtractor.h"
 #include<thread>
@@ -15,16 +14,20 @@
 #include"domainManager.h"
 #include"utils/systemClock.h"
 #include<optional>
+#include"net/httpClient.h"
+#include"net/curlHttpClient.h"
 
 Crawler::Crawler(
     Storage& storage, 
     DomainManager& domainManager,
     SystemClock& clock,
+    HttpClient& httpClient,
     int maxPages, 
     int workerCount) :
         storage_(storage),
         domainManager_(domainManager),
         clock_(clock),
+        httpClient_(httpClient),
         maxPages_(maxPages),
         workerCount_(workerCount)
 {
@@ -94,7 +97,7 @@ void Crawler::fetchRobots(const std::string& url) {
 
         auto start = clock_.now();
 
-        FetchResult result = fetch_url(robotsUrl);
+        HttpClient::FetchResult result = httpClient_.fetchUrl(robotsUrl);
 
         logFetchTime(url, start);
         auto duration = clock_.now() - start;
@@ -125,7 +128,7 @@ void Crawler::fetchPage(const std::string& url) {
 
     auto start = clock_.now();
 
-    FetchResult result = fetch_url(url);
+    HttpClient::FetchResult result = httpClient_.fetchUrl(url);
 
     logFetchTime(url, start);
     auto duration = clock_.now() - start;
@@ -251,7 +254,8 @@ int main(int argc, char** argv) {
     Storage storage("data");
     SystemClock clock;
     DomainManager domainManager(clock);
-    Crawler crawler(storage, domainManager, clock, maxPages, WORKER_COUNT);
+    CurlHttpClient httpClient;
+    Crawler crawler(storage, domainManager, clock, httpClient, maxPages, WORKER_COUNT);
 	crawler.run(seedUrl);
     Indexer indexer(storage);
 
