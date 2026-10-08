@@ -23,6 +23,7 @@ target_include_directories(search PRIVATE
 )
 
 add_executable(crawler
+    "src/crawl/main.cpp"
     "src/crawl/crawler.cpp"
     "src/index/indexer.cpp"
     "src/parsing/linkExtractor.cpp"
