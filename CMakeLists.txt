@@ -23,7 +23,7 @@ target_include_directories(search PRIVATE
 )
 
 add_executable(crawler
-    "src/crawl/main.cpp"
+    "src/crawl/main"
     "src/crawl/crawler.cpp"
     "src/index/indexer.cpp"
     "src/parsing/linkExtractor.cpp"
@@ -58,8 +58,18 @@ enable_testing()
 add_executable(tests
     tests/domainManagerTests.cpp
     tests/robotsTxtParserTests.cpp
-    "src/crawl/domainManager.cpp"
-    "src/parsing/robotsTxtParser.cpp"
+    tests/crawlerTests.cpp
+
+    src/crawl/domainManager.cpp
+    src/parsing/robotsTxtParser.cpp
+    src/crawl/crawler.cpp
+
+    src/storage/storage.cpp
+    src/index/indexer.cpp
+    src/parsing/htmlParser.cpp
+    src/parsing/linkExtractor.cpp
+    src/net/curlHttpClient.cpp
+    src/net/fetcher.cpp
 )
 
 target_include_directories(tests PRIVATE
@@ -69,6 +79,7 @@ target_include_directories(tests PRIVATE
 target_link_libraries(tests
     PRIVATE
     GTest::gtest_main
+    CURL::libcurl
 )
 
 
