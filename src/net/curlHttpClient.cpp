@@ -7,7 +7,7 @@ size_t CurlHttpClient::write_callback(char* ptr, size_t size, size_t nmemb, std:
 	return size * nmemb;
 }
 
-HttpClient::FetchResult CurlHttpClient::fetchUrl(const std::string& url) const {
+HttpClient::FetchResult CurlHttpClient::fetchUrl(const std::string& url) {
     CURL* curl = curl_easy_init();
 
     if (!curl) {

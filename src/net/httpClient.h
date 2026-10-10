@@ -10,5 +10,5 @@ public:
         std::string data;
     };
 
-    virtual FetchResult fetchUrl(const std::string& url) const = 0;
+    virtual FetchResult fetchUrl(const std::string& url) = 0;
 };
