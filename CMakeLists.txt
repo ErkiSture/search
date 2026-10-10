@@ -56,9 +56,11 @@ FetchContent_MakeAvailable(googletest)
 enable_testing()
 
 add_executable(tests
-    tests/domainManagerTests.cpp
-    tests/robotsTxtParserTests.cpp
-    tests/crawlerTests.cpp
+    "tests/unit/domainManagerTests.cpp"
+    "tests/unit/robotsTxtParserTests.cpp"
+    "tests/integration/crawlerTests.cpp"
+    "tests/integration/crawlerDomainManagerTests.cpp" 
+    "tests/integration/crawlerStorageTests.cpp"
 
     src/crawl/domainManager.cpp
     src/parsing/robotsTxtParser.cpp
@@ -70,10 +72,11 @@ add_executable(tests
     src/parsing/linkExtractor.cpp
     src/net/curlHttpClient.cpp
     src/net/fetcher.cpp
-)
+ )
 
 target_include_directories(tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
 )
 
 target_link_libraries(tests
