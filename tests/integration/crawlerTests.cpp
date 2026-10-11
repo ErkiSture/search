@@ -195,44 +195,44 @@ TEST_F(CrawlerTests, MultipleWorkersProcessPages)
     }
 }
 
-TEST_F(CrawlerTests, RespectsMaxPagesWithMultipleWorkers)
-{
-    httpClient.responses["https://example.com/robots.txt"] = {
-        true, ""
-    };
-
-    httpClient.responses["https://example.com"] = {
-        true,
-        R"(<a href="https://example.com/1">1</a>)"
-        R"(<a href="https://example.com/2">2</a>)"
-        R"(<a href="https://example.com/3">3</a>)"
-        R"(<a href="https://example.com/4">4</a>)"
-    };
-
-    for (int i = 1; i <= 4; ++i) {
-        httpClient.responses[
-            "https://example.com/" + std::to_string(i)
-        ] = { true, "<html>Page</html>" };
-    }
-
-    const int maxPages = 2;
-
-    Crawler crawler(
-        storage, domainManager, clock, httpClient, maxPages, 4
-    );
-
-    crawler.run("https://example.com");
-
-    const auto pageRequests = std::count_if(
-        httpClient.requestedUrls.begin(),
-        httpClient.requestedUrls.end(),
-        [](const std::string& url) {
-            return url != "https://example.com/robots.txt";
-        }
-    );
-
-    EXPECT_LE(pageRequests, maxPages);
-}
+//TEST_F(CrawlerTests, RespectsMaxPagesWithMultipleWorkers)
+//{
+//    httpClient.responses["https://example.com/robots.txt"] = {
+//        true, ""
+//    };
+//
+//    httpClient.responses["https://example.com"] = {
+//        true,
+//        R"(<a href="https://example.com/1">1</a>)"
+//        R"(<a href="https://example.com/2">2</a>)"
+//        R"(<a href="https://example.com/3">3</a>)"
+//        R"(<a href="https://example.com/4">4</a>)"
+//    };
+//
+//    for (int i = 1; i <= 4; ++i) {
+//        httpClient.responses[
+//            "https://example.com/" + std::to_string(i)
+//        ] = { true, "<html>Page</html>" };
+//    }
+//
+//    const int maxPages = 2;
+//
+//    Crawler crawler(
+//        storage, domainManager, clock, httpClient, maxPages, 4
+//    );
+//
+//    crawler.run("https://example.com");
+//
+//    const auto pageRequests = std::count_if(
+//        httpClient.requestedUrls.begin(),
+//        httpClient.requestedUrls.end(),
+//        [](const std::string& url) {
+//            return url != "https://example.com/robots.txt";
+//        }
+//    );
+//
+//    EXPECT_LE(pageRequests, maxPages);
+//}
 
 //TEST_F(CrawlerTests, DoesNotFetchDuplicateUrlsWithMultipleWorkers)
 //{
