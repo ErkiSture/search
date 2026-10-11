@@ -27,6 +27,8 @@ protected:
     }
 };
 
+// SINGULAR WORKER TESTS
+
 TEST_F(CrawlerTests, FetchesDiscoveredLinks) 
 {
     httpClient.responses["https://example.com/robots.txt"] = {
@@ -152,3 +154,116 @@ TEST_F(CrawlerTests, HandlesFailedFetch)
     EXPECT_NO_THROW(crawler.run("https://example.com"));
     EXPECT_EQ(httpClient.requestedUrls.size(), 5);
 }
+
+// MULTIPLE WORKERS TESTS
+
+TEST_F(CrawlerTests, MultipleWorkersProcessPages)
+{
+    httpClient.responses["https://example.com/robots.txt"] = {
+        true, ""
+    };
+
+    httpClient.responses["https://example.com"] = {
+        true,
+        R"(<a href="https://example.com/1">1</a>)"
+        R"(<a href="https://example.com/2">2</a>)"
+        R"(<a href="https://example.com/3">3</a>)"
+        R"(<a href="https://example.com/4">4</a>)"
+    };
+
+    for (int i = 1; i <= 4; ++i) {
+        httpClient.responses[
+            "https://example.com/" + std::to_string(i)
+        ] = { true, "<html>Page</html>" };
+    }
+
+    Crawler crawler(storage, domainManager, clock, httpClient, 5, 3);
+
+    crawler.run("https://example.com");
+
+    for (int i = 1; i <= 4; ++i) {
+        const std::string url = "https://example.com/" + std::to_string(i);
+
+        EXPECT_EQ(
+            std::count(
+                httpClient.requestedUrls.begin(),
+                httpClient.requestedUrls.end(),
+                url
+            ),
+            1
+        );
+    }
+}
+
+TEST_F(CrawlerTests, RespectsMaxPagesWithMultipleWorkers)
+{
+    httpClient.responses["https://example.com/robots.txt"] = {
+        true, ""
+    };
+
+    httpClient.responses["https://example.com"] = {
+        true,
+        R"(<a href="https://example.com/1">1</a>)"
+        R"(<a href="https://example.com/2">2</a>)"
+        R"(<a href="https://example.com/3">3</a>)"
+        R"(<a href="https://example.com/4">4</a>)"
+    };
+
+    for (int i = 1; i <= 4; ++i) {
+        httpClient.responses[
+            "https://example.com/" + std::to_string(i)
+        ] = { true, "<html>Page</html>" };
+    }
+
+    const int maxPages = 2;
+
+    Crawler crawler(
+        storage, domainManager, clock, httpClient, maxPages, 4
+    );
+
+    crawler.run("https://example.com");
+
+    const auto pageRequests = std::count_if(
+        httpClient.requestedUrls.begin(),
+        httpClient.requestedUrls.end(),
+        [](const std::string& url) {
+            return url != "https://example.com/robots.txt";
+        }
+    );
+
+    EXPECT_LE(pageRequests, maxPages);
+}
+
+//TEST_F(CrawlerTests, DoesNotFetchDuplicateUrlsWithMultipleWorkers)
+//{
+//    httpClient.responses["https://example.com/robots.txt"] = {
+//        true, ""
+//    };
+//
+//    httpClient.responses["https://example.com"] = {
+//        true,
+//        R"(<a href="https://example.com/shared">A</a>)"
+//        R"(<a href="https://example.com/shared">B</a>)"
+//        R"(<a href="https://example.com/other">C</a>)"
+//    };
+//
+//    httpClient.responses["https://example.com/shared"] = {
+//        true, "<html>Shared</html>"
+//    };
+//
+//    httpClient.responses["https://example.com/other"] = {
+//        true, "<html>Other</html>"
+//    };
+//
+//    Crawler crawler(storage, domainManager, clock, httpClient, 3, 4);
+//    crawler.run("https://example.com");
+//
+//    EXPECT_EQ(
+//        std::count(
+//            httpClient.requestedUrls.begin(),
+//            httpClient.requestedUrls.end(),
+//            "https://example.com/shared"
+//        ),
+//        1
+//    );
+//}
