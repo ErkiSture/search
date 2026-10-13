@@ -12,3 +12,4 @@ Release/
 *.exe
 *.user
 Testing/
+vcpkg_installed

@@ -1,22 +1,38 @@
-name: Build and test
+name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  build-and-test:
+    runs-on: windows-2025-vs2026
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Set vcpkg root
+        shell: pwsh
+        run: |
+          $root = $env:VCPKG_INSTALLATION_ROOT
+          if (-not $root) { $root = "C:\vcpkg" }
+          "VCPKG_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Verify vcpkg
+        shell: pwsh
+        run: |
+          Write-Host "VCPKG_ROOT=$env:VCPKG_ROOT"
+          if (-not (Test-Path "$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake")) {
+            throw "vcpkg toolchain file not found!"
+          }
+          Write-Host "vcpkg toolchain found."
 
       - name: Configure
-        run: cmake -S . -B build
+        run: cmake --preset x64-debug
 
       - name: Build
-        run: cmake --build build/out/debug64
+        run: cmake --build out/build/x64-debug --config Debug --parallel
 
       - name: Test
-        run: ctest --test-dir out/build/debug64 --output-on-failure
+        run: ctest --test-dir out/build/x64-debug -C Debug --output-on-failure
