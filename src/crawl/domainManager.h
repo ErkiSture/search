@@ -16,9 +16,10 @@ enum class RequestStatus {
 
 class DomainManager{
 public:
-	explicit DomainManager(Clock& clock) : clock(clock)
-	{
-	};
+	explicit DomainManager(
+		Clock& clock,
+		std::chrono::milliseconds crawlDelay =
+		std::chrono::milliseconds(500));
 
 	RequestStatus check(const std::string& url);
 	bool isAllowed(const std::string& url);
@@ -27,11 +28,13 @@ public:
 	std::string getRobotsUrl(const std::string& url);
 	bool sameDomain(const std::string& url1, const std::string& url2);
 	std::string getDomain(const std::string& url) const;
+
 	std::chrono::steady_clock::time_point
 		nextAllowedRequestTime(const std::string& url) const;
 
 private:
-	Clock& clock;
+	Clock& clock_;
+	std::chrono::milliseconds crawlDelay_;
 
 	struct DomainState {
 		bool loadedRobotsTxt;
@@ -45,5 +48,4 @@ private:
 	};
 
 	std::unordered_map<std::string, DomainState> domains_;
-	static constexpr std::chrono::milliseconds DEFAULT_DOMAIN_RATE_LIMIT_MS = std::chrono::milliseconds(500);
 };

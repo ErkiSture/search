@@ -15,7 +15,7 @@ protected:
 
     Storage storage{ testDir };
     SystemClock clock;
-    DomainManager domainManager{ clock };
+    DomainManager domainManager{ clock, std::chrono::milliseconds(50) };
     FakeHttpClient httpClient;
 
     void SetUp() override {
@@ -155,6 +155,54 @@ TEST_F(CrawlerTests, HandlesFailedFetch)
     EXPECT_EQ(httpClient.requestedUrls.size(), 5);
 }
 
+TEST_F(CrawlerTests, RespectsDomainCrawlDelay) {
+    httpClient.responses["https://example.com/robots.txt"] = {
+        true, ""
+    };
+    httpClient.responses["https://test1.com/robots.txt"] = {
+        true, ""
+    };
+    httpClient.responses["https://test1.com/robots.txt"] = {
+        true, ""
+    };
+
+    httpClient.responses["https://example.com"] = {
+        true,
+        R"(<a href="https://test1.com">1</a>)"
+        R"(<a href="https://test2.com">1</a>)"
+    };
+
+    httpClient.responses["https://test1.com"] = {
+        true,
+        "<html>test1</html>"
+    };
+
+    httpClient.responses["https://test2.com"] = {
+        true,
+        "<html>test2</html>"
+    };
+
+    SystemClock realClock;
+    DomainManager testDomainManager(
+        realClock, std::chrono::milliseconds(500));
+
+    Crawler crawler(
+        storage, testDomainManager, realClock, httpClient, 100, 1);
+
+    auto start = std::chrono::steady_clock::now();
+    crawler.run("https://example.com");
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    EXPECT_GE(elapsed, std::chrono::milliseconds(1000));
+    EXPECT_LE(elapsed, std::chrono::milliseconds(1300));
+
+    EXPECT_GE(httpClient.requestTimes[1] - httpClient.requestTimes[0], std::chrono::milliseconds(500));
+    EXPECT_LE(httpClient.requestTimes[2] - httpClient.requestTimes[1], std::chrono::milliseconds(30));
+    EXPECT_LE(httpClient.requestTimes[3] - httpClient.requestTimes[2], std::chrono::milliseconds(30));
+    EXPECT_GE(httpClient.requestTimes[4] - httpClient.requestTimes[2], std::chrono::milliseconds(500));
+    EXPECT_GE(httpClient.requestTimes[5] - httpClient.requestTimes[3], std::chrono::milliseconds(500));
+}
+
 // MULTIPLE WORKERS TESTS
 
 TEST_F(CrawlerTests, MultipleWorkersProcessPages)
@@ -264,4 +312,52 @@ TEST_F(CrawlerTests, DoesNotFetchDuplicateUrlsWithMultipleWorkers)
         ),
         1
     );
+}
+
+TEST_F(CrawlerTests, RespectsDomainCrawlDelayWithMultipleWorkers) {
+    httpClient.responses["https://example.com/robots.txt"] = {
+        true, ""
+    };
+    httpClient.responses["https://test1.com/robots.txt"] = {
+        true, ""
+    };
+    httpClient.responses["https://test1.com/robots.txt"] = {
+        true, ""
+    };
+
+    httpClient.responses["https://example.com"] = {
+        true,
+        R"(<a href="https://test1.com">1</a>)"
+        R"(<a href="https://test2.com">1</a>)"
+    };
+
+    httpClient.responses["https://test1.com"] = {
+        true,
+        "<html>test1</html>"
+    };
+
+    httpClient.responses["https://test2.com"] = {
+        true,
+        "<html>test2</html>"
+    };
+
+    SystemClock realClock;
+    DomainManager testDomainManager(
+        realClock, std::chrono::milliseconds(500));
+
+    Crawler crawler(
+        storage, testDomainManager, realClock, httpClient, 100, 4);
+
+    auto start = std::chrono::steady_clock::now();
+    crawler.run("https://example.com");
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    EXPECT_GE(elapsed, std::chrono::milliseconds(1000));
+    EXPECT_LE(elapsed, std::chrono::milliseconds(1300));
+
+    EXPECT_GE(httpClient.requestTimes[1] - httpClient.requestTimes[0], std::chrono::milliseconds(500));
+    EXPECT_LE(httpClient.requestTimes[2] - httpClient.requestTimes[1], std::chrono::milliseconds(30));
+    EXPECT_LE(httpClient.requestTimes[3] - httpClient.requestTimes[2], std::chrono::milliseconds(30));
+    EXPECT_GE(httpClient.requestTimes[4] - httpClient.requestTimes[2], std::chrono::milliseconds(500));
+    EXPECT_GE(httpClient.requestTimes[5] - httpClient.requestTimes[3], std::chrono::milliseconds(500));
 }

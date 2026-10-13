@@ -15,7 +15,7 @@ protected:
 
     Storage storage{ testDir };
     SystemClock clock;
-    DomainManager domainManager{ clock };
+    DomainManager domainManager{ clock, std::chrono::milliseconds(50) };
     FakeHttpClient httpClient;
 
     void SetUp() override {

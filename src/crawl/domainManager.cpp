@@ -4,6 +4,14 @@
 #include"parsing/robotsTxtParser.h"
 #include<chrono>
 
+DomainManager::DomainManager(
+	Clock& clock,
+	std::chrono::milliseconds crawlDelay)
+	: clock_(clock),
+	crawlDelay_(crawlDelay)
+{
+}
+
 /*
 * Looks of the domain status for the given url and returns a status describing 
 * if the url should be crawled. Alternatively if robots.txt should be fetched
@@ -20,8 +28,8 @@ RequestStatus DomainManager::check(const std::string& url)
 			true,
 			{},
 			{},
-			DEFAULT_DOMAIN_RATE_LIMIT_MS,
-			clock.now()
+			crawlDelay_,
+			clock_.now()
 		};
 
 		return RequestStatus::FetchRobots;
@@ -42,7 +50,7 @@ RequestStatus DomainManager::check(const std::string& url)
 		return RequestStatus::Disallowed;
 	}
 
-	if (clock.now() - state.lastRequest < state.crawlDelay) {
+	if (clock_.now() - state.lastRequest < state.crawlDelay) {
 		return RequestStatus::RateLimited;
 	}
 
@@ -120,7 +128,7 @@ void DomainManager::saveRequest(const std::string& url)
 
 	auto& state = it->second;
 
-	state.lastRequest = clock.now();
+	state.lastRequest = clock_.now();
 }
 
 /*
@@ -135,8 +143,8 @@ void DomainManager::saveRobotsResult(const std::string& url, const std::string& 
 		false,
 		robotsRules.allowed,
 		robotsRules.disallowed,
-		std::chrono::milliseconds(DEFAULT_DOMAIN_RATE_LIMIT_MS),
-		clock.now(),
+		std::chrono::milliseconds(crawlDelay_),
+		clock_.now(),
 	};
 
 	std::string domain = getDomain(url);

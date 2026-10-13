@@ -2,14 +2,17 @@
 #include <map>
 #include <vector>
 #include <string>
+#include <chrono>
 
 class FakeHttpClient : public HttpClient {
 public:
-	std::map<std::string, FetchResult> responses;
-	std::vector<std::string> requestedUrls;
+    std::map<std::string, FetchResult> responses;
+    std::vector<std::string> requestedUrls;
+    std::vector<std::chrono::steady_clock::time_point> requestTimes;
 
     FetchResult fetchUrl(const std::string& url) override {
         requestedUrls.push_back(url);
+        requestTimes.push_back(std::chrono::steady_clock::now());
 
         auto it = responses.find(url);
         if (it == responses.end()) {
