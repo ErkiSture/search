@@ -105,6 +105,7 @@ void Crawler::fetchRobots(const std::string& url) {
         // Add robots fetch time
         sumFetchTime_ += duration.count();
 
+        lock.lock();
         if (result.success) {
             domainManager_.saveRobotsResult(robotsUrl, result.data);
         }
@@ -164,7 +165,12 @@ void Crawler::fetchPage(const std::string& url) {
 }
 
 void Crawler::processUrl(std::string& url) {
-    RequestStatus status = domainManager_.check(url);
+    RequestStatus status;
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        status = domainManager_.check(url);
+    }
 
     switch (status) {
 
