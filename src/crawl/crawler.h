@@ -12,6 +12,18 @@
 #include"utils/systemClock.h"
 #include"net/httpClient.h"
 
+
+struct DelayedUrl {
+	std::chrono::steady_clock::time_point readyAt;
+	std::string url;
+};
+
+struct CompareReadyTime {
+	bool operator()(const DelayedUrl& a, const DelayedUrl& b) const {
+		return a.readyAt > b.readyAt;
+	}
+};
+
 class Crawler {
 public:
 	explicit Crawler(
@@ -41,6 +53,18 @@ private:
 
 	std::unordered_set<std::string> visited_;
 	std::queue<std::string> frontier_;
+
+	std::priority_queue<
+		DelayedUrl,
+		std::vector<DelayedUrl>,
+		CompareReadyTime
+	> delayed_;
+
+	std::unordered_map<std::string, std::vector<std::string>>
+		waitingForRobots_;
+
+	void promoteReadyUrls();
+	void scheduleRetry(const std::string& url);
 
 	Storage& storage_;
 	DomainManager& domainManager_;

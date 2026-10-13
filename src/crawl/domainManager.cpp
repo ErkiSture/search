@@ -2,6 +2,7 @@
 #include<string>
 #include<iostream>
 #include"parsing/robotsTxtParser.h"
+#include<chrono>
 
 /*
 * Looks of the domain status for the given url and returns a status describing 
@@ -14,7 +15,6 @@ RequestStatus DomainManager::check(const std::string& url)
 	auto it = domains_.find(domain);
 
 	if (it == domains_.end()) {
-
 		domains_[domain] = {
 			false,
 			true,
@@ -30,9 +30,8 @@ RequestStatus DomainManager::check(const std::string& url)
 	auto& state = it->second;
 
 	if (!state.loadedRobotsTxt) {
-
 		if (state.loadingRobotsTxt) {
-			return RequestStatus::Wait;
+			return RequestStatus::WaitForRobots;
 		}
 
 		state.loadingRobotsTxt = true;
@@ -44,7 +43,7 @@ RequestStatus DomainManager::check(const std::string& url)
 	}
 
 	if (clock.now() - state.lastRequest < state.crawlDelay) {
-		return RequestStatus::Wait;
+		return RequestStatus::RateLimited;
 	}
 
 	return RequestStatus::Allowed;
@@ -147,7 +146,7 @@ void DomainManager::saveRobotsResult(const std::string& url, const std::string& 
 /*
 * Takes a url and returns the domain
 */
-std::string DomainManager::getDomain(const std::string& url){
+std::string DomainManager::getDomain(const std::string& url) const {
 	size_t schemeEnd = url.find("://");
 	if (schemeEnd == std::string::npos)
 		return "";
@@ -184,4 +183,17 @@ std::string DomainManager::getRobotsUrl(const std::string& url) {
 bool DomainManager::sameDomain(const std::string& url1, const std::string& url2)
 {
 	return getDomain(url1) == getDomain(url2);
+}
+
+
+std::chrono::steady_clock::time_point
+DomainManager::nextAllowedRequestTime(const std::string& url) const
+{
+	auto it = domains_.find(getDomain(url));
+
+	if (it == domains_.end()) {
+		return std::chrono::steady_clock::now();
+	}
+
+	return it->second.lastRequest + it->second.crawlDelay;
 }

@@ -195,75 +195,73 @@ TEST_F(CrawlerTests, MultipleWorkersProcessPages)
     }
 }
 
-//TEST_F(CrawlerTests, RespectsMaxPagesWithMultipleWorkers)
-//{
-//    httpClient.responses["https://example.com/robots.txt"] = {
-//        true, ""
-//    };
-//
-//    httpClient.responses["https://example.com"] = {
-//        true,
-//        R"(<a href="https://example.com/1">1</a>)"
-//        R"(<a href="https://example.com/2">2</a>)"
-//        R"(<a href="https://example.com/3">3</a>)"
-//        R"(<a href="https://example.com/4">4</a>)"
-//    };
-//
-//    for (int i = 1; i <= 4; ++i) {
-//        httpClient.responses[
-//            "https://example.com/" + std::to_string(i)
-//        ] = { true, "<html>Page</html>" };
-//    }
-//
-//    const int maxPages = 2;
-//
-//    Crawler crawler(
-//        storage, domainManager, clock, httpClient, maxPages, 4
-//    );
-//
-//    crawler.run("https://example.com");
-//
-//    const auto pageRequests = std::count_if(
-//        httpClient.requestedUrls.begin(),
-//        httpClient.requestedUrls.end(),
-//        [](const std::string& url) {
-//            return url != "https://example.com/robots.txt";
-//        }
-//    );
-//
-//    EXPECT_LE(pageRequests, maxPages);
-//}
+TEST_F(CrawlerTests, RespectsMaxPagesWithMultipleWorkers)
+{
+    httpClient.responses["https://example.com/robots.txt"] = {
+        true, ""
+    };
 
-//TEST_F(CrawlerTests, DoesNotFetchDuplicateUrlsWithMultipleWorkers)
-//{
-//    httpClient.responses["https://example.com/robots.txt"] = {
-//        true, ""
-//    };
-//
-//    httpClient.responses["https://example.com"] = {
-//        true,
-//        R"(<a href="https://example.com/shared">A</a>)"
-//        R"(<a href="https://example.com/shared">B</a>)"
-//        R"(<a href="https://example.com/other">C</a>)"
-//    };
-//
-//    httpClient.responses["https://example.com/shared"] = {
-//        true, "<html>Shared</html>"
-//    };
-//
-//    httpClient.responses["https://example.com/other"] = {
-//        true, "<html>Other</html>"
-//    };
-//
-//    Crawler crawler(storage, domainManager, clock, httpClient, 3, 4);
-//    crawler.run("https://example.com");
-//
-//    EXPECT_EQ(
-//        std::count(
-//            httpClient.requestedUrls.begin(),
-//            httpClient.requestedUrls.end(),
-//            "https://example.com/shared"
-//        ),
-//        1
-//    );
-//}
+    httpClient.responses["https://example.com"] = {
+        true,
+        R"(<a href="https://example.com/1">1</a>)"
+        R"(<a href="https://example.com/2">2</a>)"
+        R"(<a href="https://example.com/3">3</a>)"
+        R"(<a href="https://example.com/4">4</a>)"
+        R"(<a href="https://example.com/5">5</a>)"
+        R"(<a href="https://example.com/6">6</a>)"
+    };
+
+    for (int i = 1; i <= 6; ++i) {
+        httpClient.responses[
+            "https://example.com/" + std::to_string(i)
+        ] = { true, "<html>Page</html>" };
+    }
+
+    int maxPages = 3;
+
+    Crawler crawler(
+        storage, domainManager, clock, httpClient, maxPages, 4
+    );
+
+    crawler.run("https://example.com");
+
+    for (std::string x : httpClient.requestedUrls) {
+        std::cout << x << std::endl;
+    }
+
+    EXPECT_EQ(httpClient.requestedUrls.size(), maxPages + 1);
+}
+
+TEST_F(CrawlerTests, DoesNotFetchDuplicateUrlsWithMultipleWorkers)
+{
+    httpClient.responses["https://example.com/robots.txt"] = {
+        true, ""
+    };
+
+    httpClient.responses["https://example.com"] = {
+        true,
+        R"(<a href="https://example.com/shared">A</a>)"
+        R"(<a href="https://example.com/shared">B</a>)"
+        R"(<a href="https://example.com/other">C</a>)"
+    };
+
+    httpClient.responses["https://example.com/shared"] = {
+        true, "<html>Shared</html>"
+    };
+
+    httpClient.responses["https://example.com/other"] = {
+        true, "<html>Other</html>"
+    };
+
+    Crawler crawler(storage, domainManager, clock, httpClient, 100, 4);
+    crawler.run("https://example.com");
+
+    EXPECT_EQ(
+        std::count(
+            httpClient.requestedUrls.begin(),
+            httpClient.requestedUrls.end(),
+            "https://example.com/shared"
+        ),
+        1
+    );
+}

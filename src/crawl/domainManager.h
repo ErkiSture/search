@@ -9,7 +9,9 @@ enum class RequestStatus {
 	Allowed,
 	Disallowed,
 	FetchRobots,
-	Wait
+	Wait,
+	WaitForRobots,
+	RateLimited
 };
 
 class DomainManager{
@@ -24,11 +26,13 @@ public:
 	void saveRobotsResult(const std::string& url, const std::string& text);
 	std::string getRobotsUrl(const std::string& url);
 	bool sameDomain(const std::string& url1, const std::string& url2);
+	std::string getDomain(const std::string& url) const;
+	std::chrono::steady_clock::time_point
+		nextAllowedRequestTime(const std::string& url) const;
 
 private:
 	Clock& clock;
 
-	std::string getDomain(const std::string& url);
 	struct DomainState {
 		bool loadedRobotsTxt;
 		bool loadingRobotsTxt = false;

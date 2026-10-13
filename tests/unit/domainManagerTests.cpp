@@ -180,15 +180,15 @@ TEST(DomainManagerTest, UnmatchingDomainReturnsFetchRobots)
     EXPECT_EQ(domainManager.check("https://test.com"), RequestStatus::FetchRobots);
 }
 
-TEST(DomainManagerTest, RequestToSameDomainWhileWaitingReturnsWait)
+TEST(DomainManagerTest, RequestToSameDomainWhileWaitingReturnsWaitForRobots)
 {
     SystemClock clock;
     DomainManager domainManager(clock);
 
     // Fetching from same domain immediately after first request to domain should signal waiting
     EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::FetchRobots);
-    EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::Wait);
-    EXPECT_EQ(domainManager.check("https://example.com/private"), RequestStatus::Wait);
+    EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::WaitForRobots);
+    EXPECT_EQ(domainManager.check("https://example.com/private"), RequestStatus::WaitForRobots);
 }
 
 class FakeClock : public Clock {
@@ -219,10 +219,10 @@ TEST(DomainManagerTest, RequestAfterSavedRobotsReturnsPermission)
         "Disallow: /private\n"
     );
 
-    EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::Wait);    
+    EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::RateLimited);    
     
     clock.advance(std::chrono::milliseconds(499));
-    EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::Wait);
+    EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::RateLimited);
 
     clock.advance(std::chrono::milliseconds(1));
     EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::Allowed);
