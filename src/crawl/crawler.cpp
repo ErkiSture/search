@@ -131,7 +131,7 @@ void Crawler::fetchRobots(const std::string& url)
     auto start = clock_.now();
     auto result = httpClient_.fetchUrl(robotsUrl);
 
-    logFetchTime(robotsUrl, start);
+    //logFetchTime(robotsUrl, start);
 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         clock_.now() - start
@@ -192,7 +192,7 @@ void Crawler::fetchPage(const std::string& url)
     auto start = clock_.now();
     auto result = httpClient_.fetchUrl(url);
 
-    logFetchTime(url, start);
+    //logFetchTime(url, start);
 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         clock_.now() - start
