@@ -27,9 +27,11 @@ add_executable(crawler
     "src/crawl/crawler.cpp"
     "src/index/indexer.cpp"
     "src/parsing/linkExtractor.cpp"
+    "src/parsing/urlParser.h"
     "src/storage/storage.cpp"
     "src/net/fetcher.cpp"
     "src/parsing/htmlParser.cpp"
+    "src/parsing/urlParser.cpp"
     "src/crawl/domainManager.cpp"
     "src/parsing/robotsTxtParser.cpp"
     "src/net/curlHttpClient.cpp"
@@ -70,6 +72,7 @@ add_executable(tests
     src/index/indexer.cpp
     src/parsing/htmlParser.cpp
     src/parsing/linkExtractor.cpp
+    src/parsing/urlParser.cpp
     src/net/curlHttpClient.cpp
     src/net/fetcher.cpp
  )

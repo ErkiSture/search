@@ -1,6 +1,10 @@
 #include "parsing/linkExtractor.h"
+#include "parsing/urlParser.h"
 
-std::vector<std::string> extract_links(const std::string& html, const std::string& base_url) {
+std::vector<std::string> extract_links(
+    const std::string& html,
+    const std::string& base_url
+) {
     std::vector<std::string> links;
     std::string marker = "href=\"";
 
@@ -14,9 +18,11 @@ std::vector<std::string> extract_links(const std::string& html, const std::strin
 
         std::string link = html.substr(start, end - start);
 
-        // only keep http/https links for now — skip mailto:, #anchors, javascript:, relative paths
-        if (link.rfind("http://", 0) == 0 || link.rfind("https://", 0) == 0) {
-            links.push_back(link);
+        // Resolve relative URLs and validate the scheme
+        auto resolved = resolveUrl(base_url, link);
+
+        if (resolved.has_value()) {
+            links.push_back(*resolved);
         }
 
         pos = end;
