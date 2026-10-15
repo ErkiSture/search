@@ -141,3 +141,13 @@ std::unordered_set<std::string> Storage::loadVisitedUrls()
 
 	return urls;
 }
+
+void Storage::savePageIndex(std::string& url, PageIndex& pageIndex)
+{
+
+}
+
+PostingList loadIndexOfWord(const std::string& word) 
+{
+	return PostingList();
+}

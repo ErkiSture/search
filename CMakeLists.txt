@@ -35,6 +35,7 @@ add_executable(crawler
     "src/crawl/domainManager.cpp"
     "src/parsing/robotsTxtParser.cpp"
     "src/net/curlHttpClient.cpp"
+    "src/query/querier.cpp"
 )
 
 target_include_directories(crawler PRIVATE
@@ -91,3 +92,15 @@ target_link_libraries(tests
 
 include(GoogleTest)
 gtest_discover_tests(tests)
+
+add_executable(querier
+    "src/query/main.cpp"
+    "src/query/querier.cpp"
+    "src/storage/storage.cpp"
+)
+
+target_include_directories(querier PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(querier PRIVATE CURL::libcurl)

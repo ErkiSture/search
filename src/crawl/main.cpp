@@ -16,6 +16,7 @@
 #include<optional>
 #include"net/httpClient.h"
 #include"net/curlHttpClient.h"
+#include"query/querier.h"
 
 constexpr int WORKER_COUNT = 4;
 
@@ -37,6 +38,12 @@ int main(int argc, char** argv) {
 	Indexer indexer(storage);
 
 	std::cout << "Done. Crawled " << maxPages << " pages max.\n";
+
+	Index index = indexer.build_index_from_storage();
+	storage.saveIndex(index);
+
+
+	//Querier querier(indexer);
 
 	return 0;
 }

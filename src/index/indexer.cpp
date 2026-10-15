@@ -42,3 +42,7 @@ Index Indexer::build_index_from_storage(){
 
 	return index;
 }
+
+PageIndex indexPage(std::string text) {
+	return PageIndex();
+}
