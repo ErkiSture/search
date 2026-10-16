@@ -12,7 +12,7 @@ public:
 	explicit Indexer(Storage& storage);
 	Index build_index_from_storage();
 	
-	//PageIndex indexPage(std::string text);
+	PageIndex indexPage(std::string text);
 
 private:
 	Storage& storage_;

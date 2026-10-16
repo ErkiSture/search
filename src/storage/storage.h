@@ -3,12 +3,10 @@
 #include<filesystem>
 #include<string>
 #include<unordered_set>
-#include"index/indexer.h"
 #include<unordered_map>
+#include"index/index.h"
 
 namespace fs = std::filesystem;
-using PostingList = std::unordered_map<std::string, int>; // url : count
-using PageIndex = std::unordered_map<std::string, int>; // word : count
 
 class Storage {
 public:

@@ -6,6 +6,7 @@
 
 struct SearchResult {
 	std::string url;
+	int score;
 };
 
 class Querier {

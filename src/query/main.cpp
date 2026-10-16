@@ -19,9 +19,16 @@ int main(int argc, char** argv) {
 
 		auto results = querier.search(query);
 
-		//print results
-	}
+		if (results.empty()) {
+			std::cout << "No results found" << std::endl;
+		}
 
+		for (SearchResult result : results) {
+			std::cout << "1: " << result.url << "    score: " << result.score << std::endl;
+		}
+
+		std::cout << std::endl << std::endl;
+	}
 
 	return 1;
 }
