@@ -28,6 +28,7 @@ public:
 	void markFetching(const std::string& url);
 	int countSaved();
 	void markFailed(const std::string& url);
+	std::string getStatus(const std::string& url);
 
 	void clearDatabase();
 

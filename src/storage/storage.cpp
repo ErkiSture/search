@@ -404,3 +404,35 @@ void Storage::markFailed(const std::string& url)
 
 	sqlite3_finalize(stmt);
 }
+
+std::string Storage::getStatus(const std::string& url)
+{
+	const char* sql =
+		"SELECT status FROM crawl_urls WHERE url = ? LIMIT 1;";
+
+	sqlite3_stmt* stmt = nullptr;
+
+	if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		throw std::runtime_error(sqlite3_errmsg(db_));
+	}
+
+	sqlite3_bind_text(stmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
+
+	int result = sqlite3_step(stmt);
+	std::string status;
+
+	if (result == SQLITE_ROW) {
+		const auto* value = sqlite3_column_text(stmt, 0);
+		if (value) {
+			status = reinterpret_cast<const char*>(value);
+		}
+	}
+	else if (result != SQLITE_DONE) {
+		std::string error = sqlite3_errmsg(db_);
+		sqlite3_finalize(stmt);
+		throw std::runtime_error(error);
+	}
+
+	sqlite3_finalize(stmt);
+	return status;
+}
