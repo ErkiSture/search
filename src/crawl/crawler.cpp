@@ -33,7 +33,6 @@ Crawler::Crawler(
     maxPages_(maxPages),
     workerCount_(workerCount)
 {
-    visited_ = storage.loadVisitedUrls();
 }
 
 void Crawler::logFetchTime(
@@ -65,7 +64,7 @@ void Crawler::scheduleRetry(const std::string& url)
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        if (visited_.count(url)) {
+        if (storage_.checkVisited(url)) {
             return;
         }
 
@@ -80,7 +79,8 @@ std::optional<std::string> Crawler::getNextUrl(
     std::unique_lock<std::mutex>& lock
 ) {
     while (true) {
-        if (visited_.size() >= static_cast<size_t>(maxPages_)) {
+        std::cout << "VISITED COUNT: " << storage_.countSaved() << std::endl;
+        if (storage_.countSaved() >= static_cast<size_t>(maxPages_)) {
             return std::nullopt;
         }
 
@@ -90,7 +90,7 @@ std::optional<std::string> Crawler::getNextUrl(
             std::string url = frontier_.front();
             frontier_.pop();
 
-            if (visited_.count(url)) {
+            if (storage_.checkVisited(url)) {
                 continue;
             }
 
@@ -149,7 +149,7 @@ void Crawler::fetchRobots(const std::string& url)
         sumFetchTime_ += duration.count();
 
         // Retry the URL that triggered the robots request.
-        if (!visited_.count(url)) {
+        if (!storage_.checkVisited(url)) {
             frontier_.push(url);
         }
 
@@ -159,7 +159,7 @@ void Crawler::fetchRobots(const std::string& url)
 
         if (it != waitingForRobots_.end()) {
             for (const auto& waitingUrl : it->second) {
-                if (!visited_.count(waitingUrl)) {
+                if (!storage_.checkVisited(waitingUrl)) {
                     frontier_.push(waitingUrl);
                 }
             }
@@ -176,16 +176,13 @@ void Crawler::fetchPage(const std::string& url)
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        // Avoid duplicate page fetches.
-        if (visited_.count(url)) {
+        if (storage_.checkVisited(url)) {
             return;
         }
+        else {
+            storage_.markFetching(url);
+        }
 
-        // Mark visited before releasing the lock so another worker
-        // cannot fetch the same URL simultaneously.
-        visited_.insert(url);
-
-        // Reserve the domain's request time before fetching.
         domainManager_.saveRequest(url);
     }
 
@@ -204,6 +201,7 @@ void Crawler::fetchPage(const std::string& url)
         sumFetchTime_ += duration.count();
 
         if (!result.success) {
+            storage_.markFailed(url);
             cv_.notify_all();
             return;
         }
@@ -212,7 +210,7 @@ void Crawler::fetchPage(const std::string& url)
         storage_.savePage(url, text);
 
         for (const std::string& link : extract_links(result.data, url)) {
-            if (!visited_.count(link)) {
+            if (!storage_.checkVisited(link)) {
                 frontier_.push(link);
             }
         }
@@ -313,6 +311,7 @@ void Crawler::run(const std::string& seedUrl)
 
     std::cout << "total: " << sumFetchTime_ << " ms\n";
     std::cout << "--------------------\n";
-    std::cout << "CRAWL END, took " << duration.count() << " ms\n";
+    std::cout << "CRAWL END, took " << duration.count() << " ms\n";    
+    std::cout << "Frontier size: " << frontier_.size() << "\n";
     std::cout << "--------------------\n";
 }

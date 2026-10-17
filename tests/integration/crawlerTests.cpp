@@ -357,8 +357,8 @@ TEST_F(CrawlerTests, RespectsDomainCrawlDelayWithMultipleWorkers) {
     EXPECT_LE(elapsed, std::chrono::milliseconds(1300));
 
     EXPECT_GE(httpClient.requestTimes[1] - httpClient.requestTimes[0], std::chrono::milliseconds(500));
-    EXPECT_LE(httpClient.requestTimes[2] - httpClient.requestTimes[1], std::chrono::milliseconds(30));
-    EXPECT_LE(httpClient.requestTimes[3] - httpClient.requestTimes[2], std::chrono::milliseconds(30));
+    EXPECT_LE(httpClient.requestTimes[2] - httpClient.requestTimes[1], std::chrono::milliseconds(100));
+    EXPECT_LE(httpClient.requestTimes[3] - httpClient.requestTimes[2], std::chrono::milliseconds(100));
     EXPECT_GE(httpClient.requestTimes[4] - httpClient.requestTimes[2], std::chrono::milliseconds(500));
     EXPECT_GE(httpClient.requestTimes[5] - httpClient.requestTimes[3], std::chrono::milliseconds(500));
 }

@@ -24,6 +24,11 @@ public:
 	void savePageIndex(std::string& url, PageIndex& pageIndex);
 	PostingList loadIndexOfWord(const std::string& word);
 
+	bool checkVisited(const std::string& url);
+	void markFetching(const std::string& url);
+	int countSaved();
+	void markFailed(const std::string& url);
+
 	void clearDatabase();
 
 private:

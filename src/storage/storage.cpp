@@ -314,3 +314,93 @@ void Storage::clearDatabase() {
 		throw std::runtime_error("Failed to clear database: " + error);
 	}
 }
+
+bool Storage::checkVisited(const std::string& url) {
+	const char* sql = "SELECT 1 FROM crawl_urls WHERE url = ? LIMIT 1;";
+	sqlite3_stmt * stmt;
+
+	sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
+	sqlite3_bind_text(stmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
+
+	int result = sqlite3_step(stmt);
+	bool exists = (result == SQLITE_ROW);
+
+	sqlite3_finalize(stmt);
+	return exists;
+}
+
+void Storage::markFetching(const std::string& url)
+{
+	const char* sql =
+		"INSERT OR IGNORE INTO crawl_urls (url, status) "
+		"VALUES (?, 'fetching');";
+
+	sqlite3_stmt* stmt = nullptr;
+
+	if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		throw std::runtime_error(sqlite3_errmsg(db_));
+	}
+
+	sqlite3_bind_text(stmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
+
+	if (sqlite3_step(stmt) != SQLITE_DONE) {
+		std::string error = sqlite3_errmsg(db_);
+		sqlite3_finalize(stmt);
+		throw std::runtime_error(error);
+	}
+
+	sqlite3_finalize(stmt);
+}
+
+int Storage::countSaved()
+{
+	const char* sql =
+		"SELECT COUNT(*) FROM crawl_urls WHERE status = ? or status = ?;";
+
+	sqlite3_stmt* stmt = nullptr;
+
+	if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		throw std::runtime_error(sqlite3_errmsg(db_));
+	}
+
+	sqlite3_bind_text(stmt, 1, "fetched", -1, SQLITE_STATIC);
+	sqlite3_bind_text(stmt, 2, "fetching", -1, SQLITE_STATIC);
+
+	if (sqlite3_step(stmt) != SQLITE_ROW) {
+		std::string error = sqlite3_errmsg(db_);
+		sqlite3_finalize(stmt);
+		throw std::runtime_error(error);
+	}
+
+	int count = sqlite3_column_int(stmt, 0);
+	sqlite3_finalize(stmt);
+
+	return count;
+}
+
+void Storage::markFailed(const std::string& url)
+{
+	const char* sql = R"(
+        INSERT INTO crawl_urls (url, status)
+        VALUES (?, 'failed')
+        ON CONFLICT(url) DO UPDATE SET status = 'failed';
+    )";
+
+	sqlite3_stmt* stmt = nullptr;
+
+	if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		throw std::runtime_error(sqlite3_errmsg(db_));
+	}
+
+	sqlite3_bind_text(stmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
+
+	int result = sqlite3_step(stmt);
+
+	if (result != SQLITE_DONE) {
+		std::string error = sqlite3_errmsg(db_);
+		sqlite3_finalize(stmt);
+		throw std::runtime_error(error);
+	}
+
+	sqlite3_finalize(stmt);
+}
