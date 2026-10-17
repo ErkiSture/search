@@ -20,10 +20,11 @@ protected:
 
     void SetUp() override {
         std::filesystem::create_directories(testDir);
+
+        storage.clearDatabase();
     }
 
     void TearDown() override {
-        std::filesystem::remove_all(testDir);
     }
 };
 

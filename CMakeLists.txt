@@ -11,6 +11,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(CURL REQUIRED)
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
 add_executable(search
     src/main.cpp
@@ -42,8 +43,14 @@ target_include_directories(crawler PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(search PRIVATE CURL::libcurl)
-target_link_libraries(crawler PRIVATE CURL::libcurl)
+target_link_libraries(search PRIVATE 
+    CURL::libcurl
+    unofficial::sqlite3::sqlite3
+)
+target_link_libraries(crawler PRIVATE 
+    CURL::libcurl
+    unofficial::sqlite3::sqlite3
+)
 
 include(FetchContent)
 
@@ -87,6 +94,7 @@ target_link_libraries(tests
     PRIVATE
     GTest::gtest_main
     CURL::libcurl
+    unofficial::sqlite3::sqlite3
 )
 
 
@@ -103,4 +111,7 @@ target_include_directories(querier PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(querier PRIVATE CURL::libcurl)
+target_link_libraries(querier PRIVATE 
+    CURL::libcurl
+    unofficial::sqlite3::sqlite3
+)

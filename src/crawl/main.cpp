@@ -37,13 +37,10 @@ int main(int argc, char** argv) {
 	crawler.run(seedUrl);
 	Indexer indexer(storage);
 
-	std::cout << "Done. Crawled " << maxPages << " pages max.\n";
+	std::cout << "Done. Crawled " << maxPages << " pages max.\n\n";
 
-	Index index = indexer.build_index_from_storage();
+	Index index = indexer.buildIndexFromStorage();
 	storage.saveIndex(index);
-
-
-	//Querier querier(indexer);
 
 	return 0;
 }

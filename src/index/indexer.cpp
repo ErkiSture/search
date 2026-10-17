@@ -7,7 +7,7 @@
 
 Indexer::Indexer(Storage& storage) : storage_(storage) {}
 
-void Indexer::print_index(const Index& index) {
+void Indexer::printIndex(const Index& index) {
 	std::cout << "INDEX:" << "\n";
 
 	for (const auto& [key, value] : index) {
@@ -21,12 +21,14 @@ void Indexer::print_index(const Index& index) {
 	}
 }
 
-Index Indexer::build_index_from_storage(){
+Index Indexer::buildIndexFromStorage(){
+	std::cout << "Start building index from storage" << std::endl;
 	Index index;
 
 	std::unordered_set<std::string> visisted_urls = storage_.loadVisitedUrls();
 
 	for (std::string url : visisted_urls) {
+
 		std::string page = storage_.loadPage(url);
 
 		std::stringstream ss(page);
@@ -37,17 +39,9 @@ Index Indexer::build_index_from_storage(){
 		}
 	}
 
+	std::cout << "Start saving index to storage" << std::endl;
 	storage_.saveIndex(index);
-	//print_index(index);
+	std::cout << "Finish saving index to storage" << std::endl;
 
 	return index;
 }
-
-PageIndex Indexer::indexPage(std::string text)
-{
-	return PageIndex();
-}
-
-//PageIndex indexPage(std::string text) {
-//	return PageIndex();
-//}

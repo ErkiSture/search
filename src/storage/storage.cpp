@@ -3,143 +3,286 @@
 #include"storage/storage.h"
 #include<filesystem>
 #include<iostream>
-#include<fstream>
-#include<sstream>
-
-// turns a URL into a safe, unique filename
-std::string url_to_filename(const std::string& url)
-{
-	size_t h = std::hash<std::string>{}(url);
-	return std::to_string(h) + ".txt";
-}
+#include<sqlite3.h>
 
 namespace fs = std::filesystem;
 
 Storage::Storage(const fs::path& dataDir) {
-	g_dataDir_ = dataDir;
+	fs::create_directories(dataDir);
 
-	if (!fs::exists(g_dataDir_)) {
-		fs::create_directories(g_dataDir_);
+	fs::path dbPath = dataDir / "search.db";
+
+	if (sqlite3_open(dbPath.string().c_str(), &db_) != SQLITE_OK) {
+		std::string error = db_
+			? sqlite3_errmsg(db_)
+			: "Could not allocate SQLite connection";
+
+		if (db_) {
+			sqlite3_close(db_);
+			db_ = nullptr;
+		}
+
+		throw std::runtime_error("Failed to open database: " + error);
 	}
 
-	pages_path_ = fs::path(g_dataDir_) / "pages";
-	visited_path_ = fs::path(g_dataDir_) / "manifest.txt";
-	index_path_ = fs::path(g_dataDir_) / "index.txt";
+	initializeDatabase();
+}
 
-	if (!fs::exists(pages_path_)) {
-		fs::create_directories(pages_path_);
+Storage::~Storage() {
+	if (db_) {
+		sqlite3_close(db_);
+	}
+}
+
+void Storage::initializeDatabase()
+{
+	const char* sql = R"(
+		CREATE TABLE IF NOT EXISTS crawl_urls (
+			url TEXT PRIMARY KEY,
+			status TEXT NOT NULL,
+			redirect_to TEXT
+		);
+
+		CREATE TABLE IF NOT EXISTS pages (
+			url TEXT PRIMARY KEY,
+			content TEXT NOT NULL
+			
+		);	
+
+		CREATE TABLE IF NOT EXISTS words (
+			id INTEGER PRIMARY KEY,
+			word TEXT UNIQUE NOT NULL
+			
+		);
+
+		CREATE TABLE IF NOT EXISTS postings (
+			word_id INTEGER NOT NULL,
+			url TEXT NOT NULL,
+			frequency INTEGER NOT NULL,
+			PRIMARY KEY (word_id, url)
+		);
+
+		CREATE TABLE IF NOT EXISTS domains (
+			host TEXT PRIMARY KEY,
+			robots_txt TEXT
+		);
+	)";
+
+	char* error = nullptr;
+
+	if (sqlite3_exec(db_, sql, nullptr, nullptr, &error) != SQLITE_OK) {
+		std::string message = error ? error : sqlite3_errmsg(db_);
+		sqlite3_free(error);
+		throw std::runtime_error("Failed to create tables: " + message);
 	}
 }
 
 void Storage::savePage(const std::string& url, const std::string& text)
 {
-	if (g_dataDir_.empty()) {
-		std::cerr << "init_storage() was never called\n";
-		return;
-	}
+	const char* crawlSql = R"(
+        INSERT INTO crawl_urls (url, status)
+        VALUES (?, 'fetched')
+        ON CONFLICT(url) DO UPDATE SET status = 'fetched';
+    )";
 
-	fs::path filepath = fs::path(pages_path_) / url_to_filename(url);
+	const char* pageSql = R"(
+        INSERT INTO pages (url, content)
+        VALUES (?, ?)
+        ON CONFLICT(url) DO UPDATE SET content = excluded.content;
+    )";
 
-	std::ofstream file(filepath);
-	if (!file) {
-		std::cerr << "failed to open file: " << filepath;
-	}
+	sqlite3_stmt* stmt = nullptr;
 
-	file << text;
-	file.close();
+	// Update crawl_urls
+	if (sqlite3_prepare_v2(db_, crawlSql, -1, &stmt, nullptr) != SQLITE_OK)
+		throw std::runtime_error(sqlite3_errmsg(db_));
 
-	std::ofstream manifest(visited_path_, std::ios::app);
+	sqlite3_bind_text(stmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
 
-	if (!manifest) {
-		std::cerr << "failed to open manifest\n";
-		return;
-	}
+	int result = sqlite3_step(stmt);
+	sqlite3_finalize(stmt);
 
-	manifest << url << "\n";
+	if (result != SQLITE_DONE)
+		throw std::runtime_error(sqlite3_errmsg(db_));
+
+	// Save page content
+	if (sqlite3_prepare_v2(db_, pageSql, -1, &stmt, nullptr) != SQLITE_OK)
+		throw std::runtime_error(sqlite3_errmsg(db_));
+
+	sqlite3_bind_text(stmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 2, text.c_str(), -1, SQLITE_TRANSIENT);
+
+	result = sqlite3_step(stmt);
+	sqlite3_finalize(stmt);
+
+	if (result != SQLITE_DONE)
+		throw std::runtime_error(sqlite3_errmsg(db_));
 }
 
 std::string Storage::loadPage(const std::string& url)
 {
-	fs::path filepath = pages_path_ / url_to_filename(url);
-	std::ifstream file(filepath);
-	if (!file) {
-		std::cerr << "failed to open file: " << filepath << '\n';
-		return "";
+	const char* sql =
+		"SELECT content FROM pages WHERE url = ?;";
+
+	sqlite3_stmt* stmt = nullptr;
+
+	if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		throw std::runtime_error(sqlite3_errmsg(db_));
 	}
 
-	std::stringstream ss;
-	ss << file.rdbuf();
-	return ss.str();
+	sqlite3_bind_text(stmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
+
+	int result = sqlite3_step(stmt);
+	std::string content;
+
+	if (result == SQLITE_ROW) {
+		const auto* value = sqlite3_column_text(stmt, 0);
+
+		if (value) {
+			content = reinterpret_cast<const char*>(value);
+		}
+	}
+	else if (result != SQLITE_DONE) {
+		std::string error = sqlite3_errmsg(db_);
+		sqlite3_finalize(stmt);
+		throw std::runtime_error(error);
+	}
+
+	sqlite3_finalize(stmt);
+	return content;
 }
 
-void Storage::saveIndex(const Index& index)
+Index Storage::loadIndex()
 {
-	std::ofstream out(index_path_);
-
-	if (!out) {
-		std::cerr << "failed to open file: " << index_path_ << "\n";
-		return;
-	}
-
-	for (const auto& [word, postings] : index) {
-		out << word;
-		for (const auto& [url, count] : postings) {
-			out << ' ' << url << ':' << count;
-		}
-		out << '\n';
-	}
-}
-
-Index Storage::loadIndex() {
 	Index index;
-	std::ifstream in(index_path_);
 
-	if (!in) {
-		std::cerr << "failed to open " << index_path_ << " for reading\n";
-		return index;   // empty index if nothing's been built/saved yet
+	const char* sql = R"(
+        SELECT words.word, postings.url, postings.frequency
+        FROM words
+        JOIN postings ON words.id = postings.word_id
+    )";
+
+	sqlite3_stmt* stmt;
+	if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		std::cerr << "Failed to load index: " << sqlite3_errmsg(db_) << '\n';
+		return index;
 	}
 
-	std::string line;
-	while (std::getline(in, line)) {
-		std::stringstream ss(line);
+	while (sqlite3_step(stmt) == SQLITE_ROW) {
+		std::string word = reinterpret_cast<const char*>(
+			sqlite3_column_text(stmt, 0));
 
-		std::string word;
-		ss >> word;
+		std::string url = reinterpret_cast<const char*>(
+			sqlite3_column_text(stmt, 1));
 
-		std::string entry;
-		while (ss >> entry) {
-			size_t colon = entry.rfind(':');
-			if (colon == std::string::npos)
-				continue;
+		int frequency = sqlite3_column_int(stmt, 2);
 
-			std::string url = entry.substr(0, colon);
-			std::string count_str = entry.substr(colon + 1);
-
-			int count = std::stoi(count_str);
-			index[word][url] = count;
-		}
+		index[word][url] = frequency;
 	}
 
+	sqlite3_finalize(stmt);
 	return index;
 }
 
 std::unordered_set<std::string> Storage::loadVisitedUrls()
 {
 	std::unordered_set<std::string> urls;
-	std::ifstream manifest(visited_path_);
 
-	if (!manifest) {
-		return urls;
+	sqlite3_stmt* stmt = nullptr;
+
+	const char* sql = R"(SELECT url FROM crawl_urls;)";
+
+	if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+		throw std::runtime_error(sqlite3_errmsg(db_));
 	}
 
-	std::string line;
-	while (std::getline(manifest, line)) {
-		if (!line.empty()) {
-			urls.insert(line);
+	while (sqlite3_step(stmt) == SQLITE_ROW) {
+		const unsigned char* value = sqlite3_column_text(stmt, 0);
+
+		if (value) {
+			urls.insert(reinterpret_cast<const char*>(value));
 		}
 	}
 
+	sqlite3_finalize(stmt);
+
 	return urls;
+}
+
+void Storage::saveIndex(const Index& index)
+{
+	char* error = nullptr;
+
+	if (sqlite3_exec(db_, "BEGIN TRANSACTION", nullptr, nullptr, &error) != SQLITE_OK) {
+		std::string msg = error ? error : sqlite3_errmsg(db_);
+		sqlite3_free(error);
+		throw std::runtime_error(msg);
+	}
+
+	sqlite3_stmt* insertWord = nullptr;
+	sqlite3_stmt* selectWord = nullptr;
+	sqlite3_stmt* insertPosting = nullptr;
+
+	try {
+		sqlite3_prepare_v2(db_,
+			"INSERT OR IGNORE INTO words (word) VALUES (?)",
+			-1, &insertWord, nullptr);
+
+		sqlite3_prepare_v2(db_,
+			"SELECT id FROM words WHERE word = ?",
+			-1, &selectWord, nullptr);
+
+		sqlite3_prepare_v2(db_,
+			"INSERT INTO postings (word_id, url, frequency) VALUES (?, ?, ?) "
+			"ON CONFLICT(word_id, url) DO UPDATE SET frequency = excluded.frequency",
+			-1, &insertPosting, nullptr);
+
+		for (const auto& [word, postings] : index) {
+			sqlite3_bind_text(insertWord, 1, word.c_str(), -1, SQLITE_TRANSIENT);
+			if (sqlite3_step(insertWord) != SQLITE_DONE)
+				throw std::runtime_error(sqlite3_errmsg(db_));
+
+			sqlite3_reset(insertWord);
+			sqlite3_clear_bindings(insertWord);
+
+			sqlite3_bind_text(selectWord, 1, word.c_str(), -1, SQLITE_TRANSIENT);
+			if (sqlite3_step(selectWord) != SQLITE_ROW)
+				throw std::runtime_error(sqlite3_errmsg(db_));
+
+			int wordId = sqlite3_column_int(selectWord, 0);
+			sqlite3_reset(selectWord);
+			sqlite3_clear_bindings(selectWord);
+
+			for (const auto& [url, frequency] : postings) {
+				sqlite3_bind_int(insertPosting, 1, wordId);
+				sqlite3_bind_text(insertPosting, 2, url.c_str(), -1, SQLITE_TRANSIENT);
+				sqlite3_bind_int(insertPosting, 3, frequency);
+
+				if (sqlite3_step(insertPosting) != SQLITE_DONE)
+					throw std::runtime_error(sqlite3_errmsg(db_));
+
+				sqlite3_reset(insertPosting);
+				sqlite3_clear_bindings(insertPosting);
+			}
+		}
+
+		sqlite3_finalize(insertWord);
+		sqlite3_finalize(selectWord);
+		sqlite3_finalize(insertPosting);
+
+		if (sqlite3_exec(db_, "COMMIT", nullptr, nullptr, &error) != SQLITE_OK) {
+			std::string msg = error ? error : sqlite3_errmsg(db_);
+			sqlite3_free(error);
+			throw std::runtime_error(msg);
+		}
+	}
+	catch (...) {
+		sqlite3_finalize(insertWord);
+		sqlite3_finalize(selectWord);
+		sqlite3_finalize(insertPosting);
+		sqlite3_exec(db_, "ROLLBACK", nullptr, nullptr, nullptr);
+		throw;
+	}
 }
 
 void Storage::savePageIndex(std::string& url, PageIndex& pageIndex)
@@ -147,7 +290,27 @@ void Storage::savePageIndex(std::string& url, PageIndex& pageIndex)
 
 }
 
-PostingList loadIndexOfWord(const std::string& word) 
+PostingList Storage::loadIndexOfWord(const std::string& word)
 {
 	return PostingList();
+}
+
+void Storage::clearDatabase() {
+	const char* sql = R"(
+        DELETE FROM postings;
+        DELETE FROM words;
+        DELETE FROM pages;
+        DELETE FROM crawl_urls;
+        DELETE FROM domains;
+    )";
+
+	char* errorMessage = nullptr;
+
+	int result = sqlite3_exec(db_, sql, nullptr, nullptr, &errorMessage);
+
+	if (result != SQLITE_OK) {
+		std::string error = errorMessage ? errorMessage : "Unknown SQLite error";
+		sqlite3_free(errorMessage);
+		throw std::runtime_error("Failed to clear database: " + error);
+	}
 }

@@ -5,16 +5,17 @@
 #include"index.h"
 #include"storage/storage.h"
 
+
 class Storage;
 
 class Indexer {
 public:
 	explicit Indexer(Storage& storage);
-	Index build_index_from_storage();
+	Index buildIndexFromStorage();
 	
 	PageIndex indexPage(std::string text);
 
 private:
 	Storage& storage_;
-	void print_index(const Index& index);
+	void printIndex(const Index& index);
 };
