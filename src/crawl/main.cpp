@@ -17,10 +17,16 @@
 #include"net/httpClient.h"
 #include"net/curlHttpClient.h"
 #include"query/querier.h"
+#include"processing/htmlParser.h"
 
 constexpr int WORKER_COUNT = 4;
 
 int main(int argc, char** argv) {
+
+
+
+
+
 	if (argc < 3) {
 		std::cout << "Usage: " << "crawler <seed_url> <max_pages>";
 		return 1;

@@ -32,10 +32,6 @@ public:
 	std::chrono::steady_clock::time_point
 		nextAllowedRequestTime(const std::string& url) const;
 
-private:
-	Clock& clock_;
-	std::chrono::milliseconds crawlDelay_;
-
 	struct DomainState {
 		bool loadedRobotsTxt;
 		bool loadingRobotsTxt = false;
@@ -46,6 +42,10 @@ private:
 		std::chrono::milliseconds crawlDelay;
 		std::chrono::steady_clock::time_point lastRequest;
 	};
-
 	std::unordered_map<std::string, DomainState> domains_;
+private:
+	Clock& clock_;
+	std::chrono::milliseconds crawlDelay_;
+
+
 };

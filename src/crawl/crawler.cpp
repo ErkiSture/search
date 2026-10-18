@@ -313,5 +313,6 @@ void Crawler::run(const std::string& seedUrl)
     std::cout << "--------------------\n";
     std::cout << "CRAWL END, took " << duration.count() << " ms\n";    
     std::cout << "Frontier size: " << frontier_.size() << "\n";
+    std::cout << "Domain manager size: " << domainManager_.domains_.size() << "\n";
     std::cout << "--------------------\n";
 }

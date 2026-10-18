@@ -12,6 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(CURL REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
+find_package(lexbor CONFIG REQUIRED)
 
 add_executable(search
     src/main.cpp
@@ -37,6 +38,7 @@ add_executable(crawler
     "src/parsing/robotsTxtParser.cpp"
     "src/net/curlHttpClient.cpp"
     "src/query/querier.cpp"
+    "src/processing/htmlParser.cpp"
 )
 
 target_include_directories(crawler PRIVATE
@@ -50,6 +52,7 @@ target_link_libraries(search PRIVATE
 target_link_libraries(crawler PRIVATE 
     CURL::libcurl
     unofficial::sqlite3::sqlite3
+    lexbor::lexbor
 )
 
 include(FetchContent)
@@ -71,6 +74,7 @@ add_executable(tests
     "tests/integration/crawlerTests.cpp"
     "tests/integration/crawlerDomainManagerTests.cpp" 
     "tests/integration/crawlerStorageTests.cpp"
+    "tests/unit/htmlParserTests.cpp"
 
     src/crawl/domainManager.cpp
     src/parsing/robotsTxtParser.cpp
@@ -83,7 +87,8 @@ add_executable(tests
     src/parsing/urlParser.cpp
     src/net/curlHttpClient.cpp
     src/net/fetcher.cpp
- )
+    src/processing/htmlParser.cpp
+)
 
 target_include_directories(tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -95,8 +100,8 @@ target_link_libraries(tests
     GTest::gtest_main
     CURL::libcurl
     unofficial::sqlite3::sqlite3
+    lexbor::lexbor
 )
-
 
 include(GoogleTest)
 gtest_discover_tests(tests)
@@ -114,4 +119,5 @@ target_include_directories(querier PRIVATE
 target_link_libraries(querier PRIVATE 
     CURL::libcurl
     unofficial::sqlite3::sqlite3
+    lexbor::lexbor
 )

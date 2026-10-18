@@ -4,6 +4,7 @@
   "builtin-baseline": "127402f1c75bb3d5ff6bce04b285faa4930a5aca",
   "dependencies": [
     "curl",
-    "sqlite3"
+    "sqlite3",
+    "lexbor"
   ]
 }
