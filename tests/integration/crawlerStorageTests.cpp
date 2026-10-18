@@ -41,10 +41,8 @@ TEST_F(CrawlerTests, SavesFetchedPage)
     Crawler crawler(storage, domainManager, clock, httpClient, 1, 1);
     crawler.run("https://example.com");
 
-    EXPECT_EQ(
-        storage.loadPage("https://example.com"),
-        "Hello world"
-    );
+    EXPECT_EQ(storage.loadPage("https://example.com"), "Hello world");
+    EXPECT_EQ(storage.getStatus("https://example.com"), "fetched");
 }
 
 TEST_F(CrawlerTests, DoesNotSaveFailedPage)
@@ -61,4 +59,24 @@ TEST_F(CrawlerTests, DoesNotSaveFailedPage)
     crawler.run("https://example.com");
 
     EXPECT_TRUE(storage.loadPage("https://example.com").empty());
+    EXPECT_EQ(storage.getStatus("https://example.com"), "failed");
+}
+
+TEST_F(CrawlerTests, UrlHasCorrectStatusWhileFetching) {
+    httpClient.responses["https://example.com/robots.txt"] = {
+        true, ""
+    };
+
+    httpClient.responses["https://example.com"] = {
+        false, ""
+    };
+
+    httpClient.onFetch = [&](const std::string& url) {
+        if (url == "https://example.com") {
+                EXPECT_EQ(storage.getStatus(url), "fetching");
+            }
+        };
+
+    Crawler crawler(storage, domainManager, clock, httpClient, 1, 1);
+    crawler.run("https://example.com");
 }
