@@ -18,6 +18,8 @@ add_executable(search
     src/main.cpp
     "src/net/fetcher.cpp"
     "src/parsing/htmlParser.cpp"
+    "src/processing/urlProcessor.cpp"
+    "src/processing/pageScorer.cpp"
 )
 
 target_include_directories(search PRIVATE
@@ -39,6 +41,8 @@ add_executable(crawler
     "src/net/curlHttpClient.cpp"
     "src/query/querier.cpp"
     "src/processing/htmlParser.cpp"
+    "src/processing/urlProcessor.cpp"
+    "src/processing/pageScorer.cpp"
 )
 
 target_include_directories(crawler PRIVATE
@@ -88,6 +92,8 @@ add_executable(tests
     src/net/curlHttpClient.cpp
     src/net/fetcher.cpp
     src/processing/htmlParser.cpp
+    src/processing/urlProcessor.cpp
+    src/processing/pageScorer.cpp
 )
 
 target_include_directories(tests PRIVATE

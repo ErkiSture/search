@@ -8,6 +8,8 @@
 #include "parsing/linkExtractor.h"
 #include "net/curlHttpClient.h"
 #include <filesystem>
+#include "processing/pageScorer.h"
+#include "index/indexer.h"
 
 class CrawlerTests : public testing::Test {
 protected:
@@ -17,6 +19,10 @@ protected:
     SystemClock clock;
     DomainManager domainManager{ clock, std::chrono::milliseconds(50) };
     FakeHttpClient httpClient;
+    HtmlParser htmlParser;
+    UrlProcessor urlProcessor;
+    PageScorer pageScorer;
+    Indexer indexer{ storage };
 
     void SetUp() override {
         std::filesystem::create_directories(testDir);
@@ -51,7 +57,7 @@ TEST_F(CrawlerTests, SkipsDisallowedUrls) {
         "<html>1</html>"
     };
 
-    Crawler crawler(storage, domainManager, clock, httpClient, 100, 1);
+    Crawler crawler(storage, domainManager, clock, httpClient, htmlParser, urlProcessor, pageScorer, indexer, 100, 1);
     crawler.run("https://example.com");
 
     EXPECT_EQ(httpClient.requestedUrls.size(), 3);

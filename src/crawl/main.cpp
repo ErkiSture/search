@@ -23,10 +23,6 @@ constexpr int WORKER_COUNT = 4;
 
 int main(int argc, char** argv) {
 
-
-
-
-
 	if (argc < 3) {
 		std::cout << "Usage: " << "crawler <seed_url> <max_pages>";
 		return 1;
@@ -39,14 +35,17 @@ int main(int argc, char** argv) {
 	SystemClock clock;
 	DomainManager domainManager(clock);
 	CurlHttpClient httpClient;
-	Crawler crawler(storage, domainManager, clock, httpClient, maxPages, WORKER_COUNT);
-	crawler.run(seedUrl);
+	HtmlParser htmlParser;
+	UrlProcessor urlProcessor;
+	PageScorer pageScorer;
 	Indexer indexer(storage);
+	Crawler crawler(storage, domainManager, clock, httpClient, htmlParser, urlProcessor, pageScorer, indexer, maxPages, WORKER_COUNT);
+	crawler.run(seedUrl);
 
 	std::cout << "Done. Crawled " << maxPages << " pages max.\n\n";
 
-	Index index = indexer.buildIndexFromStorage();
-	storage.saveIndex(index);
+	//Index index = indexer.buildIndexFromStorage();
+	//storage.saveIndex(index);
 
 	return 0;
 }

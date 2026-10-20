@@ -21,7 +21,7 @@ public:
 	Index loadIndex();
 	void saveIndex(const Index& index);
 
-	void savePageIndex(std::string& url, PageIndex& pageIndex);
+	void savePageIndex(const std::string& url, const PageIndex& pageIndex);
 	PostingList loadIndexOfWord(const std::string& word);
 
 	bool checkVisited(const std::string& url);

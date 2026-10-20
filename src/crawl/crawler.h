@@ -11,7 +11,9 @@
 #include<optional>
 #include"utils/systemClock.h"
 #include"net/httpClient.h"
-
+#include"processing/htmlParser.h"
+#include"processing/urlProcessor.h"
+#include"processing/pageScorer.h"
 
 struct DelayedUrl {
 	std::chrono::steady_clock::time_point readyAt;
@@ -30,7 +32,11 @@ public:
 		Storage& storage,
 		DomainManager& domainManager,
 		SystemClock& clock,
-		HttpClient&,
+		HttpClient& httpClient,
+		HtmlParser& htmlParser,
+		UrlProcessor& urlProcessor,
+		PageScorer& pageScorer,
+		Indexer& indexer,
 		int maxPages,
 		int workerCount
 	);
@@ -70,6 +76,10 @@ private:
 	DomainManager& domainManager_;
 	SystemClock& clock_;
 	HttpClient& httpClient_;
+	HtmlParser& htmlParser_;
+	UrlProcessor& urlProcessor_;
+	PageScorer& pageScorer_;
+	Indexer& indexer_;
 
 	int sumFetchTime_ = 0;
 

@@ -23,6 +23,10 @@ Crawler::Crawler(
     DomainManager& domainManager,
     SystemClock& clock,
     HttpClient& httpClient,
+    HtmlParser& htmlParser,
+    UrlProcessor& urlProcessor,
+    PageScorer& pageScorer,
+    Indexer& indexer,
     int maxPages,
     int workerCount
 )
@@ -30,6 +34,10 @@ Crawler::Crawler(
     domainManager_(domainManager),
     clock_(clock),
     httpClient_(httpClient),
+    htmlParser_(htmlParser),
+    urlProcessor_(urlProcessor),
+    pageScorer_(pageScorer),
+    indexer_(indexer),
     maxPages_(maxPages),
     workerCount_(workerCount)
 {
@@ -79,7 +87,6 @@ std::optional<std::string> Crawler::getNextUrl(
     std::unique_lock<std::mutex>& lock
 ) {
     while (true) {
-        std::cout << "VISITED COUNT: " << storage_.countSaved() << std::endl;
         if (storage_.countSaved() >= static_cast<size_t>(maxPages_)) {
             return std::nullopt;
         }
@@ -206,12 +213,24 @@ void Crawler::fetchPage(const std::string& url)
             return;
         }
 
-        std::string text = strip_html(result.data);
-        storage_.savePage(url, text);
+        ParsedPage parsedPage = htmlParser_.parse(result.data);
 
-        for (const std::string& link : extract_links(result.data, url)) {
-            if (!storage_.checkVisited(link)) {
-                frontier_.push(link);
+        double relevance = pageScorer_.score(parsedPage.title, parsedPage.text);
+        std::cout << "RELEVANCE: " << relevance << std::endl;
+
+        storage_.savePage(url, parsedPage.text); //TODO: create separate markFetched
+
+        if (relevance >= 30.0) {
+            PageIndex pageIndex = indexer_.indexPage(parsedPage.text);
+            storage_.savePageIndex(url, pageIndex);
+        }
+
+        if (relevance >= 65 || frontier_.size() < 1000) {
+            std::vector<std::string> links = urlProcessor_.process(parsedPage.links, url);
+            for (const std::string& link : links) {
+                if (!storage_.checkVisited(link)) {
+                    frontier_.push(link);
+                }
             }
         }
     }

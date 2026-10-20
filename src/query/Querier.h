@@ -15,5 +15,5 @@ public:
 
 	std::vector<SearchResult> search(std::string query);
 private:
-	Storage storage_;
+	Storage& storage_;
 };

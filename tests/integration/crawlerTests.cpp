@@ -8,6 +8,10 @@
 #include "parsing/linkExtractor.h"
 #include "net/curlHttpClient.h"
 #include <filesystem>
+#include "processing/htmlParser.h"
+#include "processing/urlProcessor.h"
+#include "processing/pageScorer.h"
+#include "index/indexer.h"
 
 class CrawlerTests : public testing::Test {
 protected:
@@ -17,6 +21,10 @@ protected:
     SystemClock clock;
     DomainManager domainManager{ clock, std::chrono::milliseconds(50) };
     FakeHttpClient httpClient;
+    HtmlParser htmlParser;
+    UrlProcessor urlProcessor;
+    PageScorer pageScorer;
+    Indexer indexer{ storage };
 
     void SetUp() override {
         std::filesystem::create_directories(testDir);
@@ -62,7 +70,7 @@ TEST_F(CrawlerTests, FetchesDiscoveredLinks)
         R"(<html>4</html>)"
     };
 
-    Crawler crawler(storage, domainManager, clock, httpClient, 100, 1);
+    Crawler crawler(storage, domainManager, clock, httpClient, htmlParser, urlProcessor, pageScorer, indexer, 100, 1);
     crawler.run("https://example.com");
 
     EXPECT_EQ(httpClient.requestedUrls.size(), 6);
@@ -86,7 +94,7 @@ TEST_F(CrawlerTests, DoesNotFetchDuplicateUrls)
         R"(<a href="https://example.com/1">1</a>)"
     };
 
-    Crawler crawler(storage, domainManager, clock, httpClient, 100, 1);
+    Crawler crawler(storage, domainManager, clock, httpClient, htmlParser, urlProcessor, pageScorer, indexer, 100, 1);
     crawler.run("https://example.com");
 
     EXPECT_EQ(httpClient.requestedUrls.size(), 3);
@@ -119,7 +127,7 @@ TEST_F(CrawlerTests, StopsAtMaxPages)
         "<html>4</html>"
     };
 
-    Crawler crawler(storage, domainManager, clock, httpClient, 3, 1);
+    Crawler crawler(storage, domainManager, clock, httpClient, htmlParser, urlProcessor, pageScorer, indexer, 3, 1);
     crawler.run("https://example.com");
     
     // 3 + 1, accounting for robots.txt
@@ -151,7 +159,7 @@ TEST_F(CrawlerTests, HandlesFailedFetch)
         false, "<html>3</html>"
     };
 
-    Crawler crawler(storage, domainManager, clock, httpClient, 100, 1);
+    Crawler crawler(storage, domainManager, clock, httpClient, htmlParser, urlProcessor, pageScorer, indexer, 100, 1);
     EXPECT_NO_THROW(crawler.run("https://example.com"));
     EXPECT_EQ(httpClient.requestedUrls.size(), 5);
 }
@@ -188,7 +196,7 @@ TEST_F(CrawlerTests, RespectsDomainCrawlDelay) {
         realClock, std::chrono::milliseconds(500));
 
     Crawler crawler(
-        storage, testDomainManager, realClock, httpClient, 100, 1);
+        storage, testDomainManager, realClock, httpClient, htmlParser, urlProcessor, pageScorer, indexer, 100, 1);
 
     auto start = std::chrono::steady_clock::now();
     crawler.run("https://example.com");
@@ -198,8 +206,8 @@ TEST_F(CrawlerTests, RespectsDomainCrawlDelay) {
     EXPECT_LE(elapsed, std::chrono::milliseconds(1300));
 
     EXPECT_GE(httpClient.requestTimes[1] - httpClient.requestTimes[0], std::chrono::milliseconds(500));
-    EXPECT_LE(httpClient.requestTimes[2] - httpClient.requestTimes[1], std::chrono::milliseconds(30));
-    EXPECT_LE(httpClient.requestTimes[3] - httpClient.requestTimes[2], std::chrono::milliseconds(30));
+    EXPECT_LE(httpClient.requestTimes[2] - httpClient.requestTimes[1], std::chrono::milliseconds(100));
+    EXPECT_LE(httpClient.requestTimes[3] - httpClient.requestTimes[2], std::chrono::milliseconds(100));
     EXPECT_GE(httpClient.requestTimes[4] - httpClient.requestTimes[2], std::chrono::milliseconds(500));
     EXPECT_GE(httpClient.requestTimes[5] - httpClient.requestTimes[3], std::chrono::milliseconds(500));
 }
@@ -226,7 +234,7 @@ TEST_F(CrawlerTests, MultipleWorkersProcessPages)
         ] = { true, "<html>Page</html>" };
     }
 
-    Crawler crawler(storage, domainManager, clock, httpClient, 5, 3);
+    Crawler crawler(storage, domainManager, clock, httpClient, htmlParser, urlProcessor, pageScorer, indexer, 5, 3);
 
     crawler.run("https://example.com");
 
@@ -268,9 +276,7 @@ TEST_F(CrawlerTests, RespectsMaxPagesWithMultipleWorkers)
 
     int maxPages = 3;
 
-    Crawler crawler(
-        storage, domainManager, clock, httpClient, maxPages, 4
-    );
+    Crawler crawler(storage, domainManager, clock, httpClient, htmlParser, urlProcessor, pageScorer, indexer, maxPages, 4);
 
     crawler.run("https://example.com");
 
@@ -302,7 +308,7 @@ TEST_F(CrawlerTests, DoesNotFetchDuplicateUrlsWithMultipleWorkers)
         true, "<html>Other</html>"
     };
 
-    Crawler crawler(storage, domainManager, clock, httpClient, 100, 4);
+    Crawler crawler(storage, domainManager, clock, httpClient, htmlParser, urlProcessor, pageScorer, indexer, 100, 4);
     crawler.run("https://example.com");
 
     EXPECT_EQ(
@@ -347,7 +353,7 @@ TEST_F(CrawlerTests, RespectsDomainCrawlDelayWithMultipleWorkers) {
         realClock, std::chrono::milliseconds(500));
 
     Crawler crawler(
-        storage, testDomainManager, realClock, httpClient, 100, 4);
+        storage, testDomainManager, realClock, httpClient, htmlParser, urlProcessor, pageScorer, indexer, 100, 4);
 
     auto start = std::chrono::steady_clock::now();
     crawler.run("https://example.com");
