@@ -218,7 +218,8 @@ void Crawler::fetchPage(const std::string& url)
         double relevance = pageScorer_.score(parsedPage.title, parsedPage.text);
         std::cout << "RELEVANCE: " << relevance << std::endl;
 
-        storage_.savePage(url, parsedPage.text); //TODO: create separate markFetched
+        storage_.markFetched(url);
+        storage_.savePageContent(url, parsedPage.text);
 
         if (relevance >= 30.0) {
             PageIndex pageIndex = indexer_.indexPage(parsedPage.text);

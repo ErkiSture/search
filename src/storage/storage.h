@@ -14,7 +14,7 @@ public:
 	explicit Storage(const fs::path& dataDir);
 	~Storage();
 
-	void savePage(const std::string & url, const std::string & text);
+	void savePageContent(const std::string & url, const std::string & text);
 	std::unordered_set<std::string> loadVisitedUrls();
 	std::string loadPage(const std::string& url);
 	
@@ -28,6 +28,7 @@ public:
 	void markFetching(const std::string& url);
 	int countSaved();
 	void markFailed(const std::string& url);
+	void markFetched(const std::string& url);
 	std::string getStatus(const std::string& url);
 
 	void clearDatabase();
