@@ -52,6 +52,7 @@ target_include_directories(crawler PRIVATE
 target_link_libraries(search PRIVATE 
     CURL::libcurl
     unofficial::sqlite3::sqlite3
+    lexbor::lexbor
 )
 target_link_libraries(crawler PRIVATE 
     CURL::libcurl
@@ -79,6 +80,7 @@ add_executable(tests
     "tests/integration/crawlerDomainManagerTests.cpp" 
     "tests/integration/crawlerStorageTests.cpp"
     "tests/unit/htmlParserTests.cpp"
+    "tests/unit/urlProcessorTests.cpp"
 
     src/crawl/domainManager.cpp
     src/parsing/robotsTxtParser.cpp
