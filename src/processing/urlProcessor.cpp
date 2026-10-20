@@ -3,6 +3,8 @@
 #include <unordered_set>
 #include <vector>
 #include <lexbor/url/url.h>
+#include <algorithm>
+#include <cctype>
 
 static lxb_status_t appendUrl(
     const lxb_char_t* data,
@@ -101,12 +103,71 @@ std::vector<std::string> UrlProcessor::deduplicateLinks(const std::vector<std::s
     return deduplicatedLinks;
 }
 
+std::vector<std::string> UrlProcessor::filterLinks(
+    const std::vector<std::string>& links
+) const {
+    static const std::unordered_set<std::string> excludedExtensions = {
+        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".ico",
+        ".pdf",
+        ".js", ".css",
+        ".mp4", ".mp3", ".wav", ".avi", ".mov",
+        ".zip", ".rar", ".7z", ".exe",
+        ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"
+    };
+
+    std::vector<std::string> filtered;
+    filtered.reserve(links.size());
+
+    for (const auto& url : links) {
+        // Only allow HTTP and HTTPS.
+        if (url.rfind("http://", 0) != 0 &&
+            url.rfind("https://", 0) != 0) {
+            continue;
+        }
+
+        // Ignore query parameters and fragments.
+        const auto end = url.find_first_of("?#");
+        const std::string cleanUrl = url.substr(0, end);
+
+        // Find the final path segment.
+        const auto schemeEnd = cleanUrl.find("://");
+        const auto pathStart = cleanUrl.find('/', schemeEnd + 3);
+
+        if (pathStart != std::string::npos) {
+            const auto slash = cleanUrl.find_last_of('/');
+            const auto dot = cleanUrl.find_last_of('.');
+
+            if (dot != std::string::npos && dot > slash) {
+                std::string extension = cleanUrl.substr(dot);
+
+                std::transform(
+                    extension.begin(),
+                    extension.end(),
+                    extension.begin(),
+                    [](unsigned char c) {
+                        return static_cast<char>(std::tolower(c));
+                    }
+                );
+
+                if (excludedExtensions.count(extension)) {
+                    continue;
+                }
+            }
+        }
+
+        filtered.push_back(url);
+    }
+
+    return filtered;
+}
+
 std::vector<std::string> UrlProcessor::process(
     const std::vector<std::string>& links,
     const std::string& baseUrl
 ) const {
     auto resolved = resolveRelative(links, baseUrl);
     auto fragmentFree = removeFragments(resolved);
-    return deduplicateLinks(fragmentFree);
+    auto filtered = filterLinks(fragmentFree);
+    return deduplicateLinks(filtered);
 }
 

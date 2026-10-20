@@ -14,10 +14,16 @@ private:
         const std::vector<std::string>& links,
         const std::string& baseUrl
     ) const;
+
     std::vector<std::string> UrlProcessor::removeFragments(
         const std::vector<std::string>& links
     ) const;
+
     std::vector<std::string> UrlProcessor::deduplicateLinks(
+        const std::vector<std::string>& links
+    ) const;
+
+    std::vector<std::string> filterLinks(
         const std::vector<std::string>& links
     ) const;
 };
