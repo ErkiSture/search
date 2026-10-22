@@ -17,6 +17,7 @@
 #include "utils/systemClock.h"
 #include "net/httpClient.h"
 #include "net/curlHttpClient.h"
+#include "utils/isEnglish.h"
 
 Crawler::Crawler(
     Storage& storage,
@@ -221,7 +222,7 @@ void Crawler::fetchPage(const std::string& url)
         storage_.markFetched(url);
         storage_.savePageContent(url, parsedPage.text);
 
-        if (relevance >= 30.0) {
+        if (relevance >= 30.0 && isEnglish(parsedPage.text)) {
             PageIndex pageIndex = indexer_.indexPage(parsedPage.text);
             storage_.savePageIndex(url, pageIndex);
         }
