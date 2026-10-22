@@ -206,6 +206,24 @@ ParsedPage HtmlParser::parse(const std::string& html) const
     parsedPage.links = extractLinks(document);
     parsedPage.description = extractDescription(document);
 
+    // description fallback if none was specified on the website
+    if (parsedPage.description.empty() && !parsedPage.text.empty())
+    {
+        constexpr size_t maxLength = 180;
+
+        parsedPage.description = parsedPage.text.substr(0, maxLength);
+
+        if (parsedPage.text.size() > maxLength)
+        {
+            size_t lastSpace = parsedPage.description.find_last_of(' ');
+
+            if (lastSpace != std::string::npos)
+                parsedPage.description.resize(lastSpace);
+
+            parsedPage.description += "...";
+        }
+    }
+
     lxb_html_document_destroy(document);
 
     return parsedPage;

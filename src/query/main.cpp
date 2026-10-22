@@ -23,8 +23,13 @@ int main(int argc, char** argv) {
 			std::cout << "No results found" << std::endl;
 		}
 
-		for (SearchResult result : results) {
-			std::cout << "1: " << result.url << "    score: " << result.score << std::endl;
+		for (size_t i = 0; i < std::min(results.size(), size_t{ 5 }); ++i) {
+			const SearchResult& result = results[i];
+
+			std::cout << "Title: " << result.title << '\n';
+			std::cout << "Description: " << result.description << '\n';
+			std::cout << "Url: " << result.url << '\n';
+			std::cout << "Score: " << result.score << "\n\n";
 		}
 
 		std::cout << std::endl << std::endl;

@@ -53,7 +53,6 @@ void Storage::initializeDatabase()
 		CREATE TABLE IF NOT EXISTS words (
 			id INTEGER PRIMARY KEY,
 			word TEXT UNIQUE NOT NULL
-			
 		);
 
 		CREATE TABLE IF NOT EXISTS postings (
@@ -80,13 +79,17 @@ void Storage::initializeDatabase()
 
 void Storage::savePageContent(
 	const std::string& url,
-	const std::string& text)
-{
+	const std::string& title,
+	const std::string& description,
+	const std::string& text
+) {
 	const char* sql = R"(
-        INSERT INTO pages (url, content)
-        VALUES (?, ?)
-        ON CONFLICT(url) DO UPDATE
-        SET content = excluded.content;
+        INSERT INTO pages (url, title, description, content)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(url) DO UPDATE SET
+            title = excluded.title,
+            description = excluded.description,
+            content = excluded.content;
     )";
 
 	sqlite3_stmt* stmt = nullptr;
@@ -95,7 +98,9 @@ void Storage::savePageContent(
 		throw std::runtime_error(sqlite3_errmsg(db_));
 
 	sqlite3_bind_text(stmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
-	sqlite3_bind_text(stmt, 2, text.c_str(), -1, SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 2, title.c_str(), -1, SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 3, description.c_str(), -1, SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt, 4, text.c_str(), -1, SQLITE_TRANSIENT);
 
 	int result = sqlite3_step(stmt);
 	sqlite3_finalize(stmt);
@@ -456,6 +461,35 @@ PostingList Storage::loadIndexOfWord(const std::string& word)
 	}
 
 	return postingList;
+}
+
+std::pair<std::string, std::string> Storage::loadPageMetadata(
+	const std::string& url)
+{
+	const char* sql =
+		"SELECT title, description FROM pages WHERE url = ?;";
+
+	sqlite3_stmt* stmt = nullptr;
+
+	if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK)
+		throw std::runtime_error(sqlite3_errmsg(db_));
+
+	sqlite3_bind_text(stmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
+
+	std::pair<std::string, std::string> metadata;
+
+	if (sqlite3_step(stmt) == SQLITE_ROW) {
+		const auto* title = sqlite3_column_text(stmt, 0);
+		const auto* description = sqlite3_column_text(stmt, 1);
+
+		metadata.first = title
+			? reinterpret_cast<const char*>(title) : "";
+		metadata.second = description
+			? reinterpret_cast<const char*>(description) : "";
+	}
+
+	sqlite3_finalize(stmt);
+	return metadata;
 }
 
 void Storage::clearDatabase() {

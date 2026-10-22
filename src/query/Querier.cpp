@@ -31,16 +31,23 @@ std::vector<SearchResult> Querier::search(std::string query)
         std::cout << "Loading postings took "
             << std::chrono::duration_cast<std::chrono::milliseconds>(
                 end - start).count()
-            << " ms\n";
+            << " ms\n\n";
         for (const auto& [url, frequency] : postings) {
             scores[url] += frequency;
         }
     }
 
+    // Build search results
     std::vector<SearchResult> results;
-
     for (const auto& [url, score] : scores) {
-        results.push_back({ url, score });
+        auto [title, description] = storage_.loadPageMetadata(url);
+
+        results.push_back({
+            url,
+            score,
+            title,
+            description
+        });
     }
 
     std::sort(results.begin(), results.end(),

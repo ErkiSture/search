@@ -14,7 +14,12 @@ public:
 	explicit Storage(const fs::path& dataDir);
 	~Storage();
 
-	void savePageContent(const std::string & url, const std::string & text);
+	void savePageContent(
+		const std::string& url,
+		const std::string& title,
+		const std::string& description,
+		const std::string& text
+	);
 	std::unordered_set<std::string> loadVisitedUrls();
 	std::string loadPage(const std::string& url);
 	
@@ -23,6 +28,9 @@ public:
 
 	void savePageIndex(const std::string& url, const PageIndex& pageIndex);
 	PostingList loadIndexOfWord(const std::string& word);
+	std::pair<std::string, std::string> loadPageMetadata(
+		const std::string& url
+	);
 
 	bool checkVisited(const std::string& url);
 	void markFetching(const std::string& url);

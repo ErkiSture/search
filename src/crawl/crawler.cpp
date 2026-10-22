@@ -218,7 +218,7 @@ void Crawler::fetchPage(const std::string& url)
         std::cout << "RELEVANCE: " << relevance << std::endl;
 
         storage_.markFetched(url);
-        storage_.savePageContent(url, parsedPage.text);
+        storage_.savePageContent(url, parsedPage.title, parsedPage.description, parsedPage.text);
 
         if (relevance >= 30.0 && isEnglish(parsedPage.text)) {
             PageIndex pageIndex = indexer_.indexPage(parsedPage.text);

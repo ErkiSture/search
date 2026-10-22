@@ -17,7 +17,7 @@
 #include"query/querier.h"
 #include"processing/htmlParser.h"
 
-constexpr int WORKER_COUNT = 4;
+constexpr int WORKER_COUNT = 16;
 
 int main(int argc, char** argv) {
 
