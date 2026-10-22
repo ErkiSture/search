@@ -3,8 +3,6 @@
 #include<iostream>
 #include"index/indexer.h"
 #include<queue>
-#include"parsing/htmlParser.h"
-#include"parsing/linkExtractor.h"
 #include<thread>
 #include<chrono>
 #include<mutex>

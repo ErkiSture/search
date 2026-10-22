@@ -10,8 +10,6 @@
 
 #include "storage/storage.h"
 #include "index/indexer.h"
-#include "parsing/htmlParser.h"
-#include "parsing/linkExtractor.h"
 #include "crawler.h"
 #include "domainManager.h"
 #include "utils/systemClock.h"

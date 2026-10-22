@@ -17,7 +17,7 @@ find_package(lexbor CONFIG REQUIRED)
 add_executable(search
     src/main.cpp
     "src/net/fetcher.cpp"
-    "src/parsing/htmlParser.cpp"
+    
     "src/processing/urlProcessor.cpp"
     "src/processing/pageScorer.cpp"
 )
@@ -30,14 +30,14 @@ add_executable(crawler
     "src/crawl/main"
     "src/crawl/crawler.cpp"
     "src/index/indexer.cpp"
-    "src/parsing/linkExtractor.cpp"
-    "src/parsing/urlParser.h"
+    
+    
     "src/storage/storage.cpp"
     "src/net/fetcher.cpp"
-    "src/parsing/htmlParser.cpp"
-    "src/parsing/urlParser.cpp"
+    
+    
     "src/crawl/domainManager.cpp"
-    "src/parsing/robotsTxtParser.cpp"
+    "src/processing/robotsTxtParser.cpp"
     "src/net/curlHttpClient.cpp"
     "src/query/querier.cpp"
     "src/processing/htmlParser.cpp"
@@ -83,14 +83,14 @@ add_executable(tests
     "tests/unit/urlProcessorTests.cpp"
 
     src/crawl/domainManager.cpp
-    src/parsing/robotsTxtParser.cpp
+    "src/processing/robotsTxtParser.cpp"
     src/crawl/crawler.cpp
 
     src/storage/storage.cpp
     src/index/indexer.cpp
-    src/parsing/htmlParser.cpp
-    src/parsing/linkExtractor.cpp
-    src/parsing/urlParser.cpp
+    
+    
+    
     src/net/curlHttpClient.cpp
     src/net/fetcher.cpp
     src/processing/htmlParser.cpp

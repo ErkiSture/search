@@ -5,7 +5,6 @@
 #include "fakes/fakeHttpClient.h"
 #include "storage/storage.h"
 #include "crawl/crawler.h"
-#include "parsing/linkExtractor.h"
 #include "net/curlHttpClient.h"
 #include <filesystem>
 #include "processing/htmlParser.h"
