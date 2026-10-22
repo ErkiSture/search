@@ -55,13 +55,18 @@ PageIndex Indexer::indexPage(const std::string text)
 		std::string cleaned;
 		cleaned.reserve(word.size());
 
+		bool onlyLetters = true;
+
 		for (unsigned char c : word) {
-			if (std::isalnum(c)) {
-				cleaned += static_cast<char>(std::tolower(c));
+			if (!std::isalpha(c)) {
+				onlyLetters = false;
+				break;
 			}
+
+			cleaned += static_cast<char>(std::tolower(c));
 		}
 
-		if (!cleaned.empty()) {
+		if (onlyLetters && !cleaned.empty()) {
 			pageIndex[cleaned]++;
 		}
 	}
