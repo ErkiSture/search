@@ -10,6 +10,7 @@ TEST(HtmlParserTests, parsesHtml) {
         <html>
         <head>
             <title>Learn C++</title>
+            <meta name="description" content="A website about C++ programming.">
         </head>
         <body>
             <h1>C++ Basics</h1>
@@ -23,6 +24,7 @@ TEST(HtmlParserTests, parsesHtml) {
     ParsedPage result = htmlParser.parse(html);
 
     EXPECT_EQ(result.title, "Learn C++");
+    EXPECT_EQ(result.description, "A website about C++ programming.");
     EXPECT_NE(result.text.find("C++ Basics"), std::string::npos);
     EXPECT_NE(result.text.find("Learn about pointers."), std::string::npos);
 

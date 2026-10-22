@@ -45,8 +45,9 @@ void Storage::initializeDatabase()
 
 		CREATE TABLE IF NOT EXISTS pages (
 			url TEXT PRIMARY KEY,
-			content TEXT NOT NULL
-			
+			content TEXT NOT NULL,
+			title TEXT,
+			description TEXT
 		);	
 
 		CREATE TABLE IF NOT EXISTS words (

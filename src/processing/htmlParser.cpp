@@ -204,6 +204,7 @@ ParsedPage HtmlParser::parse(const std::string& html) const
     parsedPage.title = extractTitle(document);
     parsedPage.text = extractText(document);
     parsedPage.links = extractLinks(document);
+    parsedPage.description = extractDescription(document);
 
     lxb_html_document_destroy(document);
 
@@ -227,6 +228,88 @@ std::string HtmlParser::extractTitle(
         reinterpret_cast<const char*>(title),
         length
     );
+}
+
+std::string HtmlParser::extractDescription(
+    lxb_html_document_t* document) const
+{
+    if (document->head == nullptr)
+    {
+        return {};
+    }
+
+    lxb_dom_collection_t* collection =
+        lxb_dom_collection_make(&document->dom_document, 16);
+
+    if (collection == nullptr)
+    {
+        return {};
+    }
+
+    const lxb_status_t status = lxb_dom_elements_by_tag_name(
+        lxb_dom_interface_element(document->head),
+        collection,
+        reinterpret_cast<const lxb_char_t*>("meta"),
+        4
+    );
+
+    std::string description;
+
+    if (status == LXB_STATUS_OK)
+    {
+        const size_t count = lxb_dom_collection_length(collection);
+
+        for (size_t i = 0; i < count; ++i)
+        {
+            lxb_dom_element_t* element =
+                lxb_dom_collection_element(collection, i);
+
+            size_t nameLength = 0;
+
+            const lxb_char_t* name =
+                lxb_dom_element_get_attribute(
+                    element,
+                    reinterpret_cast<const lxb_char_t*>("name"),
+                    4,
+                    &nameLength
+                );
+
+            if (name == nullptr ||
+                std::string(
+                    reinterpret_cast<const char*>(name),
+                    nameLength
+                ) != "description")
+            {
+                continue;
+            }
+
+            size_t contentLength = 0;
+
+            const lxb_char_t* content =
+                lxb_dom_element_get_attribute(
+                    element,
+                    reinterpret_cast<const lxb_char_t*>("content"),
+                    7,
+                    &contentLength
+                );
+
+            if (content != nullptr)
+            {
+                description = normalizeWhitespace(
+                    std::string(
+                        reinterpret_cast<const char*>(content),
+                        contentLength
+                    )
+                );
+            }
+
+            break;
+        }
+    }
+
+    lxb_dom_collection_destroy(collection, true);
+
+    return description;
 }
 
 std::string HtmlParser::extractText(
