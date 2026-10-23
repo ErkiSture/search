@@ -1,8 +1,9 @@
 #include<vector>
 #include<sstream>
 #include<iostream>
+#include <algorithm>
 
-#include"Querier.h"
+#include"querier.h"
 #include"index/index.h"
 
 Querier::Querier(Storage& storage) : storage_(storage)

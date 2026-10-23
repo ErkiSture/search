@@ -15,7 +15,7 @@
 #include "utils/systemClock.h"
 #include "net/httpClient.h"
 #include "net/curlHttpClient.h"
-#include "Frontier.h"
+#include "frontier.h"
 
 Crawler::Crawler(
     Storage& storage,

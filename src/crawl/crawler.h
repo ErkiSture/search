@@ -34,8 +34,8 @@ public:
 	void run(const std::string& seedUrl);
 
 private:
-	std::optional<std::string> Crawler::getNextUrl(std::unique_lock<std::mutex>& lock);
-	void Crawler::processUrl(std::string& url);
+	std::optional<std::string> getNextUrl(std::unique_lock<std::mutex>& lock);
+	void processUrl(std::string& url);
 	void worker();
 
 	void fetchRobots(const std::string& url);

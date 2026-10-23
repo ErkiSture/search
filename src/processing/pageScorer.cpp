@@ -1,4 +1,4 @@
-#include "PageScorer.h"
+#include "pageScorer.h"
 
 #include <algorithm>
 #include <cctype>

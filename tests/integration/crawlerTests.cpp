@@ -11,6 +11,7 @@
 #include "processing/urlProcessor.h"
 #include "processing/pageScorer.h"
 #include "index/indexer.h"
+#include <algorithm>
 
 class CrawlerTests : public testing::Test {
 protected:

@@ -13,6 +13,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(CURL REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(lexbor CONFIG REQUIRED)
+if(TARGET lexbor::lexbor)
+    set(LEXBOR_TARGET lexbor::lexbor)
+else()
+    set(LEXBOR_TARGET lexbor::lexbor_static)
+endif()
 
 add_executable(search
     src/main.cpp
@@ -53,12 +58,12 @@ target_include_directories(crawler PRIVATE
 target_link_libraries(search PRIVATE 
     CURL::libcurl
     unofficial::sqlite3::sqlite3
-    lexbor::lexbor
+    ${LEXBOR_TARGET}
 )
 target_link_libraries(crawler PRIVATE 
     CURL::libcurl
     unofficial::sqlite3::sqlite3
-    lexbor::lexbor
+    ${LEXBOR_TARGET}
 )
 
 include(FetchContent)
@@ -109,7 +114,7 @@ target_link_libraries(tests
     GTest::gtest_main
     CURL::libcurl
     unofficial::sqlite3::sqlite3
-    lexbor::lexbor
+    ${LEXBOR_TARGET}
 )
 
 include(GoogleTest)
@@ -128,5 +133,5 @@ target_include_directories(querier PRIVATE
 target_link_libraries(querier PRIVATE 
     CURL::libcurl
     unofficial::sqlite3::sqlite3
-    lexbor::lexbor
+    ${LEXBOR_TARGET}
 )

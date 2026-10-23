@@ -10,16 +10,16 @@ public:
         const std::string& baseUrl
     ) const;
 private:
-    std::vector<std::string> UrlProcessor::resolveRelative(
+    std::vector<std::string> resolveRelative(
         const std::vector<std::string>& links,
         const std::string& baseUrl
     ) const;
 
-    std::vector<std::string> UrlProcessor::removeFragments(
+    std::vector<std::string> removeFragments(
         const std::vector<std::string>& links
     ) const;
 
-    std::vector<std::string> UrlProcessor::deduplicateLinks(
+    std::vector<std::string> deduplicateLinks(
         const std::vector<std::string>& links
     ) const;
 
