@@ -15,7 +15,6 @@
 #include "utils/systemClock.h"
 #include "net/httpClient.h"
 #include "net/curlHttpClient.h"
-#include "utils/isEnglish.h"
 #include "Frontier.h"
 
 Crawler::Crawler(
@@ -41,19 +40,6 @@ Crawler::Crawler(
     maxPages_(maxPages),
     workerCount_(workerCount)
 {
-}
-
-void Crawler::logFetchTime(
-    const std::string& url,
-    std::chrono::steady_clock::time_point start
-) {
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        clock_.now() - start
-    );
-
-    std::cout << "fetched "
-        << duration.count() << " ms "
-        << url << "\n";
 }
 
 void Crawler::scheduleRetry(const std::string& url)
@@ -127,8 +113,6 @@ void Crawler::fetchRobots(const std::string& url)
 
     auto start = clock_.now();
     auto result = httpClient_.fetchUrl(robotsUrl);
-
-    //logFetchTime(robotsUrl, start);
 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         clock_.now() - start
