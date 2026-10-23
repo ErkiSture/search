@@ -9,6 +9,9 @@
 
 namespace fs = std::filesystem;
 
+
+
+
 class Storage {
 public:
 	explicit Storage(const fs::path& dataDir);
@@ -38,6 +41,9 @@ public:
 	void markFailed(const std::string& url);
 	void markFetched(const std::string& url);
 	std::string getStatus(const std::string& url);
+
+	//void loadFrontier(Frontier& frontier);
+	//void saveFrontier(std::vector<std::string>);
 
 	void clearDatabase();
 

@@ -43,6 +43,10 @@ void Storage::initializeDatabase()
 			redirect_to TEXT
 		);
 
+		CREATE TABLE IF NOT EXISTS crawl_frontier (
+			url TEXT PRIMARY KEY
+		);
+
 		CREATE TABLE IF NOT EXISTS pages (
 			url TEXT PRIMARY KEY,
 			content TEXT NOT NULL,

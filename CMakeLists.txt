@@ -17,9 +17,9 @@ find_package(lexbor CONFIG REQUIRED)
 add_executable(search
     src/main.cpp
     "src/net/fetcher.cpp"
-    
     "src/processing/urlProcessor.cpp"
     "src/processing/pageScorer.cpp"
+    "src/crawl/frontier.cpp"
 )
 
 target_include_directories(search PRIVATE
@@ -31,10 +31,8 @@ add_executable(crawler
     "src/crawl/crawler.cpp"
     "src/index/indexer.cpp"
     
-    
     "src/storage/storage.cpp"
     "src/net/fetcher.cpp"
-    
     
     "src/crawl/domainManager.cpp"
     "src/processing/robotsTxtParser.cpp"
@@ -43,6 +41,7 @@ add_executable(crawler
     "src/processing/htmlParser.cpp"
     "src/processing/urlProcessor.cpp"
     "src/processing/pageScorer.cpp"
+    "src/crawl/frontier.cpp"
 )
 
 target_include_directories(crawler PRIVATE
@@ -96,6 +95,8 @@ add_executable(tests
     src/processing/htmlParser.cpp
     src/processing/urlProcessor.cpp
     src/processing/pageScorer.cpp
+    src/crawl/frontier.cpp
+
 )
 
 target_include_directories(tests PRIVATE

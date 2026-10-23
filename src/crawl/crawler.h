@@ -14,17 +14,7 @@
 #include"processing/htmlParser.h"
 #include"processing/urlProcessor.h"
 #include"processing/pageScorer.h"
-
-struct DelayedUrl {
-	std::chrono::steady_clock::time_point readyAt;
-	std::string url;
-};
-
-struct CompareReadyTime {
-	bool operator()(const DelayedUrl& a, const DelayedUrl& b) const {
-		return a.readyAt > b.readyAt;
-	}
-};
+#include"frontier.h"
 
 class Crawler {
 public:
@@ -47,30 +37,16 @@ private:
 	void Crawler::processUrl(std::string& url);
 	void worker();
 
-	void reQueueUrl(const std::string& url);
 	void fetchRobots(const std::string& url);
 	void fetchPage(const std::string& url);
+	void scheduleRetry(const std::string& url);
+	void logFetchTime(const std::string& url, std::chrono::steady_clock::time_point start);
 
 	// Prints a url along with how long the fetch took
-	void Crawler::logFetchTime(const std::string& url, std::chrono::steady_clock::time_point start);
 	int workerCount_ = 0;
 	int activeWorkers = 0;
 	int maxPages_;
-
-	std::unordered_set<std::string> visited_;
-	std::queue<std::string> frontier_;
-
-	std::priority_queue<
-		DelayedUrl,
-		std::vector<DelayedUrl>,
-		CompareReadyTime
-	> delayed_;
-
-	std::unordered_map<std::string, std::vector<std::string>>
-		waitingForRobots_;
-
-	void promoteReadyUrls();
-	void scheduleRetry(const std::string& url);
+	int sumFetchTime_ = 0;
 
 	Storage& storage_;
 	DomainManager& domainManager_;
@@ -81,8 +57,7 @@ private:
 	PageScorer& pageScorer_;
 	Indexer& indexer_;
 
-	int sumFetchTime_ = 0;
-
+	Frontier frontier_;
 	std::mutex mutex_;
 	std::condition_variable cv_;
 };

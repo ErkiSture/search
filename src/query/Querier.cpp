@@ -38,6 +38,8 @@ std::vector<SearchResult> Querier::search(std::string query)
     }
 
     // Build search results
+    auto start = std::chrono::steady_clock::now();
+
     std::vector<SearchResult> results;
     for (const auto& [url, score] : scores) {
         auto [title, description] = storage_.loadPageMetadata(url);
@@ -54,6 +56,11 @@ std::vector<SearchResult> Querier::search(std::string query)
         [](const SearchResult& a, const SearchResult& b) {
             return a.score > b.score;
         });
+    auto end = std::chrono::steady_clock::now();
+    std::cout << "Building results and sorting them took: "
+        << std::chrono::duration_cast<std::chrono::milliseconds>(
+            end - start).count()
+        << " ms\n\n";
 
     return results;
 }

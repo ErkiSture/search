@@ -16,6 +16,7 @@
 #include "net/httpClient.h"
 #include "net/curlHttpClient.h"
 #include "utils/isEnglish.h"
+#include "Frontier.h"
 
 Crawler::Crawler(
     Storage& storage,
@@ -55,17 +56,6 @@ void Crawler::logFetchTime(
         << url << "\n";
 }
 
-// Caller must hold mutex_.
-void Crawler::promoteReadyUrls()
-{
-    auto now = clock_.now();
-
-    while (!delayed_.empty() && delayed_.top().readyAt <= now) {
-        frontier_.push(delayed_.top().url);
-        delayed_.pop();
-    }
-}
-
 void Crawler::scheduleRetry(const std::string& url)
 {
     {
@@ -76,27 +66,28 @@ void Crawler::scheduleRetry(const std::string& url)
         }
 
         auto readyAt = domainManager_.nextAllowedRequestTime(url);
-        delayed_.push({ readyAt, url });
+        frontier_.schedule(url, readyAt);
     }
 
     cv_.notify_all();
 }
 
 std::optional<std::string> Crawler::getNextUrl(
-    std::unique_lock<std::mutex>& lock
-) {
+    std::unique_lock<std::mutex>& lock)
+{
     while (true) {
+        std::cout << "COUNT SAVED: " << storage_.countSaved()
+            << " ACTIVE WORKERS: " << activeWorkers
+            << std::endl;
+
         if (storage_.countSaved() >= static_cast<size_t>(maxPages_)) {
             return std::nullopt;
         }
 
-        promoteReadyUrls();
+        frontier_.promoteReadyUrls(clock_.now());
 
-        if (!frontier_.empty()) {
-            std::string url = frontier_.front();
-            frontier_.pop();
-
-            if (storage_.checkVisited(url)) {
+        if (auto url = frontier_.tryGetNextUrl()) {
+            if (storage_.checkVisited(*url)) {
                 continue;
             }
 
@@ -104,15 +95,15 @@ std::optional<std::string> Crawler::getNextUrl(
         }
 
         // Wait until the earliest delayed URL becomes ready.
-        if (!delayed_.empty()) {
-            cv_.wait_until(lock, delayed_.top().readyAt);
+        if (auto readyAt = frontier_.nextReadyAt()) {
+            cv_.wait_until(lock, *readyAt);
             continue;
         }
 
         // No queued URLs. Only terminate if no worker is processing
         // something and no URLs are waiting for robots.txt.
         if (activeWorkers == 0) {
-            if (waitingForRobots_.empty()) {
+            if (!frontier_.hasRobotsWaiters()) {
                 return std::nullopt;
             }
 
@@ -161,16 +152,12 @@ void Crawler::fetchRobots(const std::string& url)
 
         // Release URLs waiting for robots.txt for this domain.
         std::string domain = domainManager_.getDomain(url);
-        auto it = waitingForRobots_.find(domain);
+        auto waitingUrls = frontier_.releaseRobotsWaiters(domain);
 
-        if (it != waitingForRobots_.end()) {
-            for (const auto& waitingUrl : it->second) {
-                if (!storage_.checkVisited(waitingUrl)) {
-                    frontier_.push(waitingUrl);
-                }
+        for (const auto& waitingUrl : waitingUrls) {
+            if (!storage_.checkVisited(waitingUrl)) {
+                frontier_.push(waitingUrl);
             }
-
-            waitingForRobots_.erase(it);
         }
     }
 
@@ -225,7 +212,7 @@ void Crawler::fetchPage(const std::string& url)
             storage_.savePageIndex(url, pageIndex);
         }
 
-        if (relevance >= 65 || frontier_.size() < 1000) {
+        if (relevance >= 65 || frontier_.frontierSize() < 1000) {
             std::vector<std::string> links = urlProcessor_.process(parsedPage.links, url);
             for (const std::string& link : links) {
                 if (!storage_.checkVisited(link)) {
@@ -249,7 +236,7 @@ void Crawler::processUrl(std::string& url)
 
         if (status == RequestStatus::WaitForRobots) {
             std::string domain = domainManager_.getDomain(url);
-            waitingForRobots_[domain].push_back(url);
+            frontier_.waitForRobots(domain, url);
         }
     }
 
@@ -330,8 +317,8 @@ void Crawler::run(const std::string& seedUrl)
 
     std::cout << "total: " << sumFetchTime_ << " ms\n";
     std::cout << "--------------------\n";
-    std::cout << "CRAWL END, took " << duration.count() << " ms\n";    
-    std::cout << "Frontier size: " << frontier_.size() << "\n";
+    std::cout << "CRAWL END, took " << duration.count() << " ms\n";
+    std::cout << "Frontier size: " << frontier_.frontierSize() << "\n";
     std::cout << "Domain manager size: " << domainManager_.domains_.size() << "\n";
     std::cout << "--------------------\n";
 }
