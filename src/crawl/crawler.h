@@ -15,6 +15,7 @@
 #include"processing/urlProcessor.h"
 #include"processing/pageScorer.h"
 #include"frontier.h"
+#include"crawlPolicy.h"
 
 class Crawler {
 public:
@@ -58,6 +59,7 @@ private:
 	Indexer& indexer_;
 
 	Frontier frontier_;
+	CrawlPolicy crawlPolicy_;
 	std::mutex mutex_;
 	std::condition_variable cv_;
 };

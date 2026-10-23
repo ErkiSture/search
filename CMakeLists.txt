@@ -20,6 +20,7 @@ add_executable(search
     "src/processing/urlProcessor.cpp"
     "src/processing/pageScorer.cpp"
     "src/crawl/frontier.cpp"
+    "src/crawl/crawlPolicy.cpp"
 )
 
 target_include_directories(search PRIVATE
@@ -41,7 +42,8 @@ add_executable(crawler
     "src/processing/htmlParser.cpp"
     "src/processing/urlProcessor.cpp"
     "src/processing/pageScorer.cpp"
-    "src/crawl/frontier.cpp"
+    "src/crawl/frontier.cpp"    
+    "src/crawl/crawlPolicy.cpp"
 )
 
 target_include_directories(crawler PRIVATE
@@ -88,15 +90,13 @@ add_executable(tests
     src/storage/storage.cpp
     src/index/indexer.cpp
     
-    
-    
     src/net/curlHttpClient.cpp
     src/net/fetcher.cpp
     src/processing/htmlParser.cpp
     src/processing/urlProcessor.cpp
     src/processing/pageScorer.cpp
     src/crawl/frontier.cpp
-
+    src/crawl/crawlPolicy.cpp
 )
 
 target_include_directories(tests PRIVATE

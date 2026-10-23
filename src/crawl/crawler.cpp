@@ -182,8 +182,6 @@ void Crawler::fetchPage(const std::string& url)
     auto start = clock_.now();
     auto result = httpClient_.fetchUrl(url);
 
-    //logFetchTime(url, start);
-
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         clock_.now() - start
     );
@@ -207,12 +205,12 @@ void Crawler::fetchPage(const std::string& url)
         storage_.markFetched(url);
         storage_.savePageContent(url, parsedPage.title, parsedPage.description, parsedPage.text);
 
-        if (relevance >= 30.0 && isEnglish(parsedPage.text)) {
+        if (crawlPolicy_.shouldIndex(parsedPage, relevance)) {
             PageIndex pageIndex = indexer_.indexPage(parsedPage.text);
             storage_.savePageIndex(url, pageIndex);
         }
 
-        if (relevance >= 65 || frontier_.frontierSize() < 1000) {
+        if (crawlPolicy_.shouldExplore(relevance, frontier_.frontierSize())) {
             std::vector<std::string> links = urlProcessor_.process(parsedPage.links, url);
             for (const std::string& link : links) {
                 if (!storage_.checkVisited(link)) {
