@@ -36,6 +36,22 @@ Storage::~Storage() {
 
 void Storage::initializeDatabase()
 {
+	char* error = nullptr;
+
+	if (sqlite3_exec(
+		db_,
+		"PRAGMA journal_mode=WAL;",
+		nullptr,
+		nullptr,
+		&error
+	) != SQLITE_OK) {
+		std::string message = error ? error : sqlite3_errmsg(db_);
+		sqlite3_free(error);
+		throw std::runtime_error("Failed to enable WAL mode: " + message);
+	}
+
+	sqlite3_busy_timeout(db_, 5000);
+
 	const char* sql = R"(
 		CREATE TABLE IF NOT EXISTS crawl_urls (
 			url TEXT PRIMARY KEY,
@@ -71,8 +87,6 @@ void Storage::initializeDatabase()
 			robots_txt TEXT
 		);
 	)";
-
-	char* error = nullptr;
 
 	if (sqlite3_exec(db_, sql, nullptr, nullptr, &error) != SQLITE_OK) {
 		std::string message = error ? error : sqlite3_errmsg(db_);

@@ -5,6 +5,7 @@
   "dependencies": [
     "curl",
     "sqlite3",
-    "lexbor"
+    "lexbor",
+    "crow"
   ]
 }

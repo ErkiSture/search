@@ -12,7 +12,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(CURL REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
+find_package(Crow CONFIG REQUIRED)
 find_package(lexbor CONFIG REQUIRED)
+
 if(TARGET lexbor::lexbor)
     set(LEXBOR_TARGET lexbor::lexbor)
 else()
@@ -136,4 +138,20 @@ target_link_libraries(querier PRIVATE
     CURL::libcurl
     unofficial::sqlite3::sqlite3
     ${LEXBOR_TARGET}
+)
+
+add_executable(api
+    src/api/main.cpp
+    src/query/querier.cpp
+    src/storage/storage.cpp
+    src/crawl/frontier.cpp
+)
+
+target_include_directories(api PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(api PRIVATE
+    Crow::Crow
+    unofficial::sqlite3::sqlite3
 )
