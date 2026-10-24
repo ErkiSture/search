@@ -16,6 +16,7 @@
 #include"net/curlHttpClient.h"
 #include"query/querier.h"
 #include"processing/htmlParser.h"
+#include <cstdlib>
 
 constexpr int WORKER_COUNT = 16;
 
@@ -29,7 +30,13 @@ int main(int argc, char** argv) {
 	std::string seedUrl = argv[1];
 	int maxPages = std::stoi(argv[2]);
 
-	Storage storage("data");
+	const char* dataDir = std::getenv("SEARCH_DATA_DIR");
+
+	if (!dataDir) {
+		dataDir = "data";
+	}
+
+	Storage storage(dataDir);
 	SystemClock clock;
 	DomainManager domainManager(clock);
 	CurlHttpClient httpClient;

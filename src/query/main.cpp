@@ -4,8 +4,16 @@
 #include "query/querier.h"
 #include "storage/storage.h"
 #include "index/index.h"
+#include <cstdlib>
 
 int main(int argc, char** argv) {
+
+	const char* dataDir = std::getenv("SEARCH_DATA_DIR");
+
+	if (!dataDir) {
+		dataDir = "data";
+	}
+
 	Storage storage("data");
 	Querier querier(storage);
 
