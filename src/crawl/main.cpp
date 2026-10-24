@@ -42,8 +42,5 @@ int main(int argc, char** argv) {
 
 	std::cout << "Done. Crawled " << maxPages << " pages max.\n\n";
 
-	//Index index = indexer.buildIndexFromStorage();
-	//storage.saveIndex(index);
-
 	return 0;
 }

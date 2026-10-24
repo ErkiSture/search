@@ -87,9 +87,10 @@ add_executable(tests
     "tests/integration/crawlerStorageTests.cpp"
     "tests/unit/htmlParserTests.cpp"
     "tests/unit/urlProcessorTests.cpp"
+    "tests/unit/storageTests.cpp"
 
     src/crawl/domainManager.cpp
-    "src/processing/robotsTxtParser.cpp"
+    src/processing/robotsTxtParser.cpp
     src/crawl/crawler.cpp
 
     src/storage/storage.cpp
@@ -124,6 +125,7 @@ add_executable(querier
     "src/query/main.cpp"
     "src/query/querier.cpp"
     "src/storage/storage.cpp"
+    "src/crawl/frontier.cpp"
 )
 
 target_include_directories(querier PRIVATE

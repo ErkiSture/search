@@ -272,6 +272,8 @@ void Crawler::worker()
 
 void Crawler::run(const std::string& seedUrl)
 {
+    storage_.loadFrontier(frontier_);
+
     {
         std::lock_guard<std::mutex> lock(mutex_);
         frontier_.push(seedUrl);
@@ -297,6 +299,8 @@ void Crawler::run(const std::string& seedUrl)
         std::chrono::steady_clock::now() - start
     );
 
+    storage_.saveFrontier(frontier_);
+    
     std::cout << "total: " << sumFetchTime_ << " ms\n";
     std::cout << "--------------------\n";
     std::cout << "CRAWL END, took " << duration.count() << " ms\n";

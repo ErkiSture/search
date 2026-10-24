@@ -6,11 +6,9 @@
 #include<unordered_map>
 #include"index/index.h"
 #include<sqlite3.h>
+#include"crawl/frontier.h"
 
 namespace fs = std::filesystem;
-
-
-
 
 class Storage {
 public:
@@ -42,8 +40,8 @@ public:
 	void markFetched(const std::string& url);
 	std::string getStatus(const std::string& url);
 
-	//void loadFrontier(Frontier& frontier);
-	//void saveFrontier(std::vector<std::string>);
+	void loadFrontier(Frontier& frontier);
+	void saveFrontier(Frontier& frontier);
 
 	void clearDatabase();
 
@@ -52,7 +50,6 @@ private:
 	fs::path pages_path_;
 	fs::path visited_path_;
 	fs::path index_path_;
-
 
 	sqlite3* db_ = nullptr;
 

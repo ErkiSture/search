@@ -42,9 +42,9 @@ public:
     );
     bool hasRobotsWaiters() const;
 
-private:
     std::queue<std::string> frontier_;
 
+private:
     std::priority_queue<
         DelayedUrl,
         std::vector<DelayedUrl>,

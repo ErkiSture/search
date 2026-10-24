@@ -660,3 +660,69 @@ std::string Storage::getStatus(const std::string& url)
 	sqlite3_finalize(stmt);
 	return status;
 }
+
+void Storage::saveFrontier(Frontier& frontier)
+{
+	char* error = nullptr;
+
+	if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &error) != SQLITE_OK)
+		throw std::runtime_error(error);
+
+	try {
+		sqlite3_exec(db_, "DELETE FROM crawl_frontier;", nullptr, nullptr, nullptr);
+
+		const char* sql =
+			"INSERT OR IGNORE INTO crawl_frontier (url) VALUES (?);";
+
+		sqlite3_stmt* stmt = nullptr;
+
+		if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK)
+			throw std::runtime_error(sqlite3_errmsg(db_));
+
+		// Copy the queue so the original remains unchanged
+		auto temp = frontier.frontier_;
+
+		while (!temp.empty()) {
+			const auto& url = temp.front();
+
+			sqlite3_bind_text(stmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
+
+			if (sqlite3_step(stmt) != SQLITE_DONE)
+				throw std::runtime_error(sqlite3_errmsg(db_));
+
+			sqlite3_reset(stmt);
+			sqlite3_clear_bindings(stmt);
+
+			temp.pop();
+		}
+
+		sqlite3_finalize(stmt);
+
+		if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr) != SQLITE_OK)
+			throw std::runtime_error(sqlite3_errmsg(db_));
+	}
+	catch (...) {
+		sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+		throw;
+	}
+}
+
+void Storage::loadFrontier(Frontier& frontier)
+{
+	const char* sql = "SELECT url FROM crawl_frontier;";
+
+	sqlite3_stmt* stmt = nullptr;
+
+	if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK)
+		throw std::runtime_error(sqlite3_errmsg(db_));
+
+	while (sqlite3_step(stmt) == SQLITE_ROW) {
+		const auto* value = sqlite3_column_text(stmt, 0);
+
+		if (value) {
+			frontier.push(reinterpret_cast<const char*>(value));
+		}
+	}
+
+	sqlite3_finalize(stmt);
+}
