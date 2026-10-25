@@ -27,6 +27,38 @@ namespace {
         return std::chrono::duration<double, std::milli>(duration).count();
     }
 
+    // Measures a database operation that returns void.
+    template <typename Function>
+    void timeDatabaseOperation(
+        std::chrono::nanoseconds& totalTime,
+        std::size_t& calls,
+        Function&& operation
+    ) {
+        auto start = SteadyClock::now();
+
+        operation();
+
+        totalTime += elapsedSince(start);
+        ++calls;
+    }
+
+    // Measures a database operation that returns a value.
+    template <typename Function>
+    auto timeDatabaseQuery(
+        std::chrono::nanoseconds& totalTime,
+        std::size_t& calls,
+        Function&& operation
+    ) {
+        auto start = SteadyClock::now();
+
+        auto result = operation();
+
+        totalTime += elapsedSince(start);
+        ++calls;
+
+        return result;
+    }
+
     void recordLockWait(
         WorkerStats& stats,
         LockSectionStats& section,
@@ -74,6 +106,73 @@ namespace {
             << stats.acquisitions << '\n';
     }
 
+    void printDatabaseStats(const DatabaseStats& stats)
+    {
+        std::cout << "\n  Database operations:\n";
+
+        auto printOperation = [](
+            const std::string& name,
+            std::chrono::nanoseconds duration,
+            std::size_t calls
+            ) {
+                std::cout << "  " << std::left << std::setw(25) << name
+                    << ": " << std::right << std::fixed
+                    << std::setprecision(2)
+                    << toMilliseconds(duration)
+                    << " ms | Calls: " << calls;
+
+                if (calls > 0) {
+                    std::cout << " | Avg: "
+                        << toMilliseconds(duration) / calls
+                        << " ms";
+                }
+
+                std::cout << '\n';
+            };
+
+        printOperation(
+            "checkVisited",
+            stats.checkVisitedTime,
+            stats.checkVisitedCalls
+        );
+
+        printOperation(
+            "countSaved",
+            stats.countSavedTime,
+            stats.countSavedCalls
+        );
+
+        printOperation(
+            "markFetching",
+            stats.markFetchingTime,
+            stats.markFetchingCalls
+        );
+
+        printOperation(
+            "markFetched",
+            stats.markFetchedTime,
+            stats.markFetchedCalls
+        );
+
+        printOperation(
+            "markFailed",
+            stats.markFailedTime,
+            stats.markFailedCalls
+        );
+
+        printOperation(
+            "savePageContent",
+            stats.savePageContentTime,
+            stats.savePageContentCalls
+        );
+
+        printOperation(
+            "savePageIndex",
+            stats.savePageIndexTime,
+            stats.savePageIndexCalls
+        );
+    }
+
 } // namespace
 
 
@@ -119,10 +218,18 @@ void Crawler::scheduleRetry(
 
     auto holdStart = SteadyClock::now();
 
-    if (storage_.checkVisited(url)) {
-        stats.visitedCheckTime += elapsedSince(holdStart);
-        ++stats.visitedChecks;
+    auto visitedStart = SteadyClock::now();
 
+    bool visited = timeDatabaseQuery(
+        stats.database.checkVisitedTime,
+        stats.database.checkVisitedCalls,
+        [&] { return storage_.checkVisited(url); }
+    );
+
+    stats.visitedCheckTime += elapsedSince(visitedStart);
+    ++stats.visitedChecks;
+
+    if (visited) {
         recordLockHold(stats, stats.scheduleRetryLock, holdStart);
         return;
     }
@@ -150,8 +257,9 @@ std::optional<std::string> Crawler::getNextUrl(
 
     while (true) {
         // Read the saved count only once.
-        // Do not write diagnostic output while holding mutex_.
-        std::size_t saved = storage_.countSaved();
+        std::size_t saved = savedCount_.load(
+            std::memory_order_relaxed
+        );
 
         // A negative maxPages_ means unlimited.
         if (maxPages_ >= 0 &&
@@ -164,7 +272,12 @@ std::optional<std::string> Crawler::getNextUrl(
 
         if (auto url = frontier_.tryGetNextUrl()) {
             auto visitedStart = SteadyClock::now();
-            bool visited = storage_.checkVisited(*url);
+
+            bool visited = timeDatabaseQuery(
+                stats.database.checkVisitedTime,
+                stats.database.checkVisitedCalls,
+                [&] { return storage_.checkVisited(*url); }
+            );
 
             stats.visitedCheckTime += elapsedSince(visitedStart);
             ++stats.visitedChecks;
@@ -269,7 +382,12 @@ void Crawler::fetchRobots(
 
         // Retry the URL that triggered the robots request.
         auto visitedStart = SteadyClock::now();
-        bool visited = storage_.checkVisited(url);
+
+        bool visited = timeDatabaseQuery(
+            stats.database.checkVisitedTime,
+            stats.database.checkVisitedCalls,
+            [&] { return storage_.checkVisited(url); }
+        );
 
         stats.visitedCheckTime += elapsedSince(visitedStart);
         ++stats.visitedChecks;
@@ -288,7 +406,12 @@ void Crawler::fetchRobots(
 
         for (const auto& waitingUrl : waitingUrls) {
             visitedStart = SteadyClock::now();
-            visited = storage_.checkVisited(waitingUrl);
+
+            visited = timeDatabaseQuery(
+                stats.database.checkVisitedTime,
+                stats.database.checkVisitedCalls,
+                [&] { return storage_.checkVisited(waitingUrl); }
+            );
 
             stats.visitedCheckTime += elapsedSince(visitedStart);
             ++stats.visitedChecks;
@@ -322,8 +445,14 @@ void Crawler::fetchPage(
 
         auto holdStart = SteadyClock::now();
 
+        // Check whether URL has already been visited.
         auto visitedStart = SteadyClock::now();
-        bool visited = storage_.checkVisited(url);
+
+        bool visited = timeDatabaseQuery(
+            stats.database.checkVisitedTime,
+            stats.database.checkVisitedCalls,
+            [&] { return storage_.checkVisited(url); }
+        );
 
         stats.visitedCheckTime += elapsedSince(visitedStart);
         ++stats.visitedChecks;
@@ -333,7 +462,14 @@ void Crawler::fetchPage(
             return;
         }
 
-        storage_.markFetching(url);
+        // Mark URL as fetching.
+        timeDatabaseOperation(
+            stats.database.markFetchingTime,
+            stats.database.markFetchingCalls,
+            [&] { storage_.markFetching(url); }
+        );
+
+        // Save domain request information.
         domainManager_.saveRequest(url);
 
         recordLockHold(stats, stats.fetchPageStartLock, holdStart);
@@ -361,7 +497,12 @@ void Crawler::fetchPage(
         auto holdStart = SteadyClock::now();
 
         sumFetchTime_ += fetchMilliseconds.count();
-        storage_.markFailed(url);
+
+        timeDatabaseOperation(
+            stats.database.markFailedTime,
+            stats.database.markFailedCalls,
+            [&] { storage_.markFailed(url); }
+        );
 
         recordLockHold(stats, stats.fetchPageFailureLock, holdStart);
 
@@ -378,10 +519,12 @@ void Crawler::fetchPage(
 
     // Score page relevance outside the global mutex.
     stageStart = SteadyClock::now();
+
     double relevance = pageScorer_.score(
         parsedPage.title,
         parsedPage.text
     );
+
     stats.scoringTime += elapsedSince(stageStart);
 
     // Decide whether to index the page.
@@ -438,22 +581,46 @@ void Crawler::fetchPage(
 
         sumFetchTime_ += fetchMilliseconds.count();
 
-        // Mark and save page content.
-        storage_.markFetched(url);
-
-        stageStart = SteadyClock::now();
-        storage_.savePageContent(
-            url,
-            parsedPage.title,
-            parsedPage.description,
-            parsedPage.text
+        // Mark page as fetched.
+        timeDatabaseOperation(
+            stats.database.markFetchedTime,
+            stats.database.markFetchedCalls,
+            [&] { storage_.markFetched(url); }
         );
+
+        savedCount_.fetch_add(
+            1,
+            std::memory_order_relaxed
+        );
+
+        // Save page content.
+        stageStart = SteadyClock::now();
+
+        timeDatabaseOperation(
+            stats.database.savePageContentTime,
+            stats.database.savePageContentCalls,
+            [&] {
+                storage_.savePageContent(
+                    url,
+                    parsedPage.title,
+                    parsedPage.description,
+                    parsedPage.text
+                );
+            }
+        );
+
         stats.saveContentTime += elapsedSince(stageStart);
 
         // Save the generated page index.
         if (shouldIndex) {
             stageStart = SteadyClock::now();
-            storage_.savePageIndex(url, pageIndex);
+
+            timeDatabaseOperation(
+                stats.database.savePageIndexTime,
+                stats.database.savePageIndexCalls,
+                [&] { storage_.savePageIndex(url, pageIndex); }
+            );
+
             stats.saveIndexTime += elapsedSince(stageStart);
 
             ++stats.pagesIndexed;
@@ -464,7 +631,12 @@ void Crawler::fetchPage(
             ++stats.linksProcessed;
 
             stageStart = SteadyClock::now();
-            bool linkVisited = storage_.checkVisited(link);
+
+            bool linkVisited = timeDatabaseQuery(
+                stats.database.checkVisitedTime,
+                stats.database.checkVisitedCalls,
+                [&] { return storage_.checkVisited(link); }
+            );
 
             stats.visitedCheckTime += elapsedSince(stageStart);
             ++stats.visitedChecks;
@@ -559,7 +731,6 @@ void Crawler::worker(int workerId)
         }
 
         // The lock is still held after getNextUrl returns.
-        // Include this small bookkeeping operation in Get next URL.
         auto holdStart = SteadyClock::now();
 
         ++activeWorkers;
@@ -594,6 +765,11 @@ void Crawler::worker(int workerId)
 void Crawler::run(const std::string& seedUrl)
 {
     storage_.loadFrontier(frontier_);
+
+    savedCount_.store(
+        storage_.countSaved(),
+        std::memory_order_relaxed
+    );
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -649,6 +825,9 @@ void Crawler::run(const std::string& seedUrl)
         printTime("URL processing", stats.urlProcessingTime);
         printTime("Visited checks", stats.visitedCheckTime);
         printTime("Frontier pushes", stats.frontierPushTime);
+
+        // Individual database operation timings.
+        printDatabaseStats(stats.database);
 
         std::cout << "\n  Aggregate mutex timings:\n";
 

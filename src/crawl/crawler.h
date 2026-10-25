@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <string>
@@ -8,6 +7,7 @@
 #include <vector>
 #include <condition_variable>
 #include <cstddef>
+#include <atomic>
 
 #include "storage/storage.h"
 #include "index/indexer.h"
@@ -21,33 +21,57 @@
 #include "frontier.h"
 #include "crawlPolicy.h"
 
+
 struct LockSectionStats {
     std::chrono::nanoseconds wait{};
     std::chrono::nanoseconds hold{};
     std::size_t acquisitions = 0;
 };
 
+
+struct DatabaseStats {
+    std::chrono::nanoseconds checkVisitedTime{};
+    std::chrono::nanoseconds countSavedTime{};
+    std::chrono::nanoseconds markFetchingTime{};
+    std::chrono::nanoseconds markFetchedTime{};
+    std::chrono::nanoseconds markFailedTime{};
+    std::chrono::nanoseconds savePageContentTime{};
+    std::chrono::nanoseconds savePageIndexTime{};
+
+    std::size_t checkVisitedCalls = 0;
+    std::size_t countSavedCalls = 0;
+    std::size_t markFetchingCalls = 0;
+    std::size_t markFetchedCalls = 0;
+    std::size_t markFailedCalls = 0;
+    std::size_t savePageContentCalls = 0;
+    std::size_t savePageIndexCalls = 0;
+};
+
+
 struct WorkerStats {
-    // All timing fields use nanoseconds.
-    std::chrono::nanoseconds frontierWait{ 0 };
-    std::chrono::nanoseconds httpFetch{ 0 };
-    std::chrono::nanoseconds robotsFetch{ 0 };
-    std::chrono::nanoseconds processing{ 0 };
+    // Database timings
+    DatabaseStats database;
 
-    std::chrono::nanoseconds parseTime{ 0 };
-    std::chrono::nanoseconds scoringTime{ 0 };
-    std::chrono::nanoseconds saveContentTime{ 0 };
-    std::chrono::nanoseconds indexTime{ 0 };
-    std::chrono::nanoseconds saveIndexTime{ 0 };
-    std::chrono::nanoseconds urlProcessingTime{ 0 };
-    std::chrono::nanoseconds visitedCheckTime{ 0 };
-    std::chrono::nanoseconds frontierPushTime{ 0 };
+    // Aggregate mutex timings
+    std::chrono::nanoseconds mutexWaitTime{};
+    std::chrono::nanoseconds mutexHoldTime{};
 
-    // Aggregate mutex timings.
-    std::chrono::nanoseconds mutexWaitTime{ 0 };
-    std::chrono::nanoseconds mutexHoldTime{ 0 };
+    // Stage timings
+    std::chrono::nanoseconds frontierWait{};
+    std::chrono::nanoseconds httpFetch{};
+    std::chrono::nanoseconds robotsFetch{};
+    std::chrono::nanoseconds processing{};
 
-    // Per-critical-section mutex timings.
+    std::chrono::nanoseconds parseTime{};
+    std::chrono::nanoseconds scoringTime{};
+    std::chrono::nanoseconds saveContentTime{};
+    std::chrono::nanoseconds indexTime{};
+    std::chrono::nanoseconds saveIndexTime{};
+    std::chrono::nanoseconds urlProcessingTime{};
+    std::chrono::nanoseconds visitedCheckTime{};
+    std::chrono::nanoseconds frontierPushTime{};
+
+    // Lock section timings
     LockSectionStats getNextUrlLock;
     LockSectionStats processUrlLock;
     LockSectionStats fetchPageStartLock;
@@ -58,6 +82,7 @@ struct WorkerStats {
     LockSectionStats scheduleRetryLock;
     LockSectionStats workerBookkeepingLock;
 
+    // Counters
     std::size_t urlsProcessed = 0;
     std::size_t pagesParsed = 0;
     std::size_t pagesIndexed = 0;
@@ -65,12 +90,14 @@ struct WorkerStats {
     std::size_t visitedChecks = 0;
     std::size_t frontierPushes = 0;
 
+    // Request statuses
     std::size_t allowed = 0;
     std::size_t rateLimited = 0;
     std::size_t waitForRobots = 0;
     std::size_t fetchRobots = 0;
     std::size_t disallowed = 0;
 };
+
 
 class Crawler {
 public:
@@ -98,14 +125,27 @@ private:
     void processUrl(std::string& url, WorkerStats& stats);
     void worker(int workerId);
 
-    void fetchRobots(const std::string& url, WorkerStats& stats);
-    void fetchPage(const std::string& url, WorkerStats& stats);
-    void scheduleRetry(const std::string& url, WorkerStats& stats);
+    void fetchRobots(
+        const std::string& url,
+        WorkerStats& stats
+    );
+
+    void fetchPage(
+        const std::string& url,
+        WorkerStats& stats
+    );
+
+    void scheduleRetry(
+        const std::string& url,
+        WorkerStats& stats
+    );
 
     int workerCount_ = 0;
     int activeWorkers = 0;
     int maxPages_;
     long long sumFetchTime_ = 0;
+
+    std::atomic<std::size_t> savedCount_{ 0 };
 
     std::vector<WorkerStats> workerStats_;
 
