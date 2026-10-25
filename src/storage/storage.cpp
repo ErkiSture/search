@@ -146,6 +146,9 @@ void Storage::initializeDatabase()
 			host TEXT PRIMARY KEY,
 			robots_txt TEXT
 		);
+
+		CREATE INDEX IF NOT EXISTS idx_postings_url
+		ON postings(url);
 	)";
 
 	if (sqlite3_exec(db_, sql, nullptr, nullptr, &error) != SQLITE_OK) {
