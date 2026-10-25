@@ -7,7 +7,9 @@
 
 namespace fs = std::filesystem;
 
-Storage::Storage(const fs::path& dataDir) {
+
+Storage::Storage(const fs::path& dataDir)
+{
 	fs::create_directories(dataDir);
 
 	fs::path dbPath = dataDir / "search.db";
@@ -22,17 +24,75 @@ Storage::Storage(const fs::path& dataDir) {
 			db_ = nullptr;
 		}
 
-		throw std::runtime_error("Failed to open database: " + error);
+		throw std::runtime_error(
+			"Failed to open database: " + error
+		);
 	}
 
-	initializeDatabase();
+	try {
+		initializeDatabase();
+		prepareStatements();
+	}
+	catch (...) {
+		finalizeStatements();
+
+		if (db_) {
+			sqlite3_close(db_);
+			db_ = nullptr;
+		}
+
+		throw;
+	}
 }
 
-Storage::~Storage() {
+Storage::~Storage()
+{
+	finalizeStatements();
+
 	if (db_) {
 		sqlite3_close(db_);
+		db_ = nullptr;
 	}
 }
+
+void Storage::prepareStatements()
+{
+	const char* markFetchingSql =
+		"INSERT OR IGNORE INTO crawl_urls (url, status) "
+		"VALUES (?, 'fetching');";
+
+	if (sqlite3_prepare_v2(
+		db_,
+		markFetchingSql,
+		-1,
+		&markFetchingStmt_,
+		nullptr
+	) != SQLITE_OK) {
+		throw std::runtime_error(sqlite3_errmsg(db_));
+	}
+
+	const char* checkVisitedSql =
+		"SELECT 1 FROM crawl_urls WHERE url = ? LIMIT 1;";
+
+	if (sqlite3_prepare_v2(db_, checkVisitedSql, -1, &checkVisitedStmt_, nullptr) != SQLITE_OK) {
+		throw std::runtime_error(sqlite3_errmsg(db_));
+	}
+}
+
+
+void Storage::finalizeStatements()
+{
+	if (markFetchingStmt_) {
+		sqlite3_finalize(markFetchingStmt_);
+		markFetchingStmt_ = nullptr;
+	}
+
+	if (checkVisitedStmt_) {
+		sqlite3_finalize(checkVisitedStmt_);
+		checkVisitedStmt_ = nullptr;
+	}
+}
+
 
 void Storage::initializeDatabase()
 {
@@ -530,42 +590,63 @@ void Storage::clearDatabase() {
 	}
 }
 
-bool Storage::checkVisited(const std::string& url) {
-	const char* sql = "SELECT 1 FROM crawl_urls WHERE url = ? LIMIT 1;";
-	sqlite3_stmt * stmt;
-
-	sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
-	sqlite3_bind_text(stmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
-
-	int result = sqlite3_step(stmt);
-	bool exists = (result == SQLITE_ROW);
-
-	sqlite3_finalize(stmt);
-	return exists;
-}
-
-void Storage::markFetching(const std::string& url)
+bool Storage::checkVisited(const std::string& url)
 {
-	const char* sql =
-		"INSERT OR IGNORE INTO crawl_urls (url, status) "
-		"VALUES (?, 'fetching');";
+	int rc = sqlite3_bind_text(
+		checkVisitedStmt_, 1, url.c_str(), -1, SQLITE_TRANSIENT
+	);
 
-	sqlite3_stmt* stmt = nullptr;
-
-	if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-		throw std::runtime_error(sqlite3_errmsg(db_));
-	}
-
-	sqlite3_bind_text(stmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
-
-	if (sqlite3_step(stmt) != SQLITE_DONE) {
+	if (rc != SQLITE_OK) {
 		std::string error = sqlite3_errmsg(db_);
-		sqlite3_finalize(stmt);
+		sqlite3_reset(checkVisitedStmt_);
+		sqlite3_clear_bindings(checkVisitedStmt_);
 		throw std::runtime_error(error);
 	}
 
-	sqlite3_finalize(stmt);
+	rc = sqlite3_step(checkVisitedStmt_);
+	bool exists = (rc == SQLITE_ROW);
+
+	std::string error;
+	if (rc != SQLITE_ROW && rc != SQLITE_DONE) {
+		error = sqlite3_errmsg(db_);
+	}
+
+	sqlite3_reset(checkVisitedStmt_);
+	sqlite3_clear_bindings(checkVisitedStmt_);
+
+	if (!error.empty()) {
+		throw std::runtime_error(error);
+	}
+
+	return exists;
 }
+
+
+void Storage::markFetching(const std::string& url)
+{
+	int result = sqlite3_bind_text(
+		markFetchingStmt_,
+		1,
+		url.c_str(),
+		-1,
+		SQLITE_TRANSIENT
+	);
+
+	if (result != SQLITE_OK) {
+		sqlite3_reset(markFetchingStmt_);
+		throw std::runtime_error(sqlite3_errmsg(db_));
+	}
+
+	result = sqlite3_step(markFetchingStmt_);
+
+	sqlite3_reset(markFetchingStmt_);
+	sqlite3_clear_bindings(markFetchingStmt_);
+
+	if (result != SQLITE_DONE) {
+		throw std::runtime_error(sqlite3_errmsg(db_));
+	}
+}
+
 
 int Storage::countSaved()
 {
