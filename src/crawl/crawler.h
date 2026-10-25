@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <string>
@@ -20,6 +21,12 @@
 #include "frontier.h"
 #include "crawlPolicy.h"
 
+struct LockSectionStats {
+    std::chrono::nanoseconds wait{};
+    std::chrono::nanoseconds hold{};
+    std::size_t acquisitions = 0;
+};
+
 struct WorkerStats {
     // All timing fields use nanoseconds.
     std::chrono::nanoseconds frontierWait{ 0 };
@@ -36,8 +43,20 @@ struct WorkerStats {
     std::chrono::nanoseconds visitedCheckTime{ 0 };
     std::chrono::nanoseconds frontierPushTime{ 0 };
 
+    // Aggregate mutex timings.
     std::chrono::nanoseconds mutexWaitTime{ 0 };
     std::chrono::nanoseconds mutexHoldTime{ 0 };
+
+    // Per-critical-section mutex timings.
+    LockSectionStats getNextUrlLock;
+    LockSectionStats processUrlLock;
+    LockSectionStats fetchPageStartLock;
+    LockSectionStats fetchPageSnapshotLock;
+    LockSectionStats fetchPageSaveLock;
+    LockSectionStats fetchPageFailureLock;
+    LockSectionStats fetchRobotsLock;
+    LockSectionStats scheduleRetryLock;
+    LockSectionStats workerBookkeepingLock;
 
     std::size_t urlsProcessed = 0;
     std::size_t pagesParsed = 0;
