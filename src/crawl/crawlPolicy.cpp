@@ -5,7 +5,8 @@ bool CrawlPolicy::shouldExplore(
     double relevanceScore,
     std::size_t frontierSize
 ) const {
-    return relevanceScore >= 65.0 || frontierSize < 1000;
+    return (relevanceScore >= 65.0 && frontierSize <= 20000)
+        || frontierSize < 1000;
 }
 
 bool CrawlPolicy::shouldIndex(

@@ -35,6 +35,7 @@ public:
     bool empty() const;
     std::size_t frontierSize() const;
     std::size_t delayedSize() const;
+    std::size_t robotsWaitingSize() const;
 
     void waitForRobots(const std::string& domain, const std::string& url);
     std::vector<std::string> releaseRobotsWaiters(

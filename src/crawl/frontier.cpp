@@ -63,6 +63,11 @@ std::size_t Frontier::delayedSize() const
     return delayed_.size();
 }
 
+std::size_t Frontier::robotsWaitingSize() const
+{
+    return waitingForRobots_.size();
+}
+
 void Frontier::waitForRobots(
     const std::string& domain,
     const std::string& url)

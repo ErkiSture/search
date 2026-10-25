@@ -46,7 +46,6 @@ void Crawler::scheduleRetry(const std::string& url)
 {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-
         if (storage_.checkVisited(url)) {
             return;
         }
@@ -62,9 +61,14 @@ std::optional<std::string> Crawler::getNextUrl(
     std::unique_lock<std::mutex>& lock)
 {
     while (true) {
-        std::cout << "COUNT SAVED: " << storage_.countSaved()
-            << " ACTIVE WORKERS: " << activeWorkers
-            << std::endl;
+        std::cout
+            << "[STATE]"
+            << " Saved: " << storage_.countSaved()
+            << " Active: " << activeWorkers
+            << " Ready: " << frontier_.frontierSize()
+            << " Delayed: " << frontier_.delayedSize()
+            << " Robots: " << frontier_.robotsWaitingSize()
+            << '\n';
 
         if (storage_.countSaved() >= static_cast<size_t>(maxPages_)) {
             return std::nullopt;
@@ -184,7 +188,6 @@ void Crawler::fetchPage(const std::string& url)
         ParsedPage parsedPage = htmlParser_.parse(result.data);
 
         double relevance = pageScorer_.score(parsedPage.title, parsedPage.text);
-        std::cout << "RELEVANCE: " << relevance << std::endl;
 
         storage_.markFetched(url);
         storage_.savePageContent(url, parsedPage.title, parsedPage.description, parsedPage.text);
@@ -203,6 +206,8 @@ void Crawler::fetchPage(const std::string& url)
             }
         }
     }
+
+
 
     cv_.notify_all();
 }
@@ -252,6 +257,9 @@ void Crawler::worker()
         auto url = getNextUrl(lock);
 
         if (!url.has_value()) {
+            std::cout << "[WORKER] Exiting. Active: "
+                << activeWorkers << "\n";
+
             return;
         }
 
@@ -299,6 +307,7 @@ void Crawler::run(const std::string& seedUrl)
         std::chrono::steady_clock::now() - start
     );
 
+    std::cout << "Saving frontier(" << frontier_.frontierSize() << " entries)" << std::endl;
     storage_.saveFrontier(frontier_);
     
     std::cout << "total: " << sumFetchTime_ << " ms\n";
