@@ -267,7 +267,6 @@ void Crawler::fetchRobots(
     cv_.notify_all();
 }
 
-
 void Crawler::fetchPage(
     const std::string& url,
     WorkerStats& stats
@@ -308,7 +307,80 @@ void Crawler::fetchPage(
             fetchDuration
         );
 
-    // Second critical section: process and save the result.
+    // Handle failed requests.
+    if (!result.success) {
+        auto waitStart = SteadyClock::now();
+        std::unique_lock<std::mutex> lock(mutex_);
+        stats.mutexWaitTime += elapsedSince(waitStart);
+
+        auto holdStart = SteadyClock::now();
+
+        sumFetchTime_ += fetchMilliseconds.count();
+        storage_.markFailed(url);
+
+        stats.mutexHoldTime += elapsedSince(holdStart);
+
+        lock.unlock();
+        cv_.notify_all();
+        return;
+    }
+
+
+    // Parse HTML.
+    auto stageStart = SteadyClock::now();
+    ParsedPage parsedPage = htmlParser_.parse(result.data);
+    stats.parseTime += elapsedSince(stageStart);
+    ++stats.pagesParsed;
+
+    // Score page relevance.
+    stageStart = SteadyClock::now();
+    double relevance = pageScorer_.score(
+        parsedPage.title,
+        parsedPage.text
+    );
+    stats.scoringTime += elapsedSince(stageStart);
+
+    // Generate the page index.
+    bool shouldIndex = crawlPolicy_.shouldIndex(
+        parsedPage,
+        relevance
+    );
+
+    PageIndex pageIndex;
+
+    if (shouldIndex) {
+        stageStart = SteadyClock::now();
+        pageIndex = indexer_.indexPage(parsedPage.text);
+        stats.indexTime += elapsedSince(stageStart);
+    }
+
+    // Get a snapshot of the frontier size.
+    std::size_t currentFrontierSize;
+
+    {
+        auto waitStart = SteadyClock::now();
+        std::unique_lock<std::mutex> lock(mutex_);
+        stats.mutexWaitTime += elapsedSince(waitStart);
+
+        auto holdStart = SteadyClock::now();
+
+        currentFrontierSize = frontier_.frontierSize();
+
+        stats.mutexHoldTime += elapsedSince(holdStart);
+    }
+
+    // Process URLs outside the global mutex.
+    std::vector<std::string> links;
+
+    if (crawlPolicy_.shouldExplore(
+        relevance,
+        currentFrontierSize
+    )) {
+        stageStart = SteadyClock::now();
+        links = urlProcessor_.process(parsedPage.links, url);
+        stats.urlProcessingTime += elapsedSince(stageStart);
+    }
+
     {
         auto waitStart = SteadyClock::now();
         std::unique_lock<std::mutex> lock(mutex_);
@@ -317,30 +389,6 @@ void Crawler::fetchPage(
         auto holdStart = SteadyClock::now();
 
         sumFetchTime_ += fetchMilliseconds.count();
-
-        if (!result.success) {
-            storage_.markFailed(url);
-
-            stats.mutexHoldTime += elapsedSince(holdStart);
-            lock.unlock();
-
-            cv_.notify_all();
-            return;
-        }
-
-        // Parse HTML.
-        auto stageStart = SteadyClock::now();
-        ParsedPage parsedPage = htmlParser_.parse(result.data);
-        stats.parseTime += elapsedSince(stageStart);
-        ++stats.pagesParsed;
-
-        // Score page relevance.
-        stageStart = SteadyClock::now();
-        double relevance = pageScorer_.score(
-            parsedPage.title,
-            parsedPage.text
-        );
-        stats.scoringTime += elapsedSince(stageStart);
 
         // Mark and save page content.
         storage_.markFetched(url);
@@ -354,12 +402,8 @@ void Crawler::fetchPage(
         );
         stats.saveContentTime += elapsedSince(stageStart);
 
-        // Index page if it meets the crawl policy.
-        if (crawlPolicy_.shouldIndex(parsedPage, relevance)) {
-            stageStart = SteadyClock::now();
-            PageIndex pageIndex = indexer_.indexPage(parsedPage.text);
-            stats.indexTime += elapsedSince(stageStart);
-
+        // Save the generated page index.
+        if (shouldIndex) {
             stageStart = SteadyClock::now();
             storage_.savePageIndex(url, pageIndex);
             stats.saveIndexTime += elapsedSince(stageStart);
@@ -367,30 +411,20 @@ void Crawler::fetchPage(
             ++stats.pagesIndexed;
         }
 
-        // Extract and enqueue links if the page is worth exploring.
-        if (crawlPolicy_.shouldExplore(
-            relevance,
-            frontier_.frontierSize()
-        )) {
+        // Check and enqueue extracted links.
+        for (const std::string& link : links) {
+            ++stats.linksProcessed;
+
             stageStart = SteadyClock::now();
-            std::vector<std::string> links =
-                urlProcessor_.process(parsedPage.links, url);
-            stats.urlProcessingTime += elapsedSince(stageStart);
+            bool linkVisited = storage_.checkVisited(link);
+            stats.visitedCheckTime += elapsedSince(stageStart);
+            ++stats.visitedChecks;
 
-            for (const std::string& link : links) {
-                ++stats.linksProcessed;
-
+            if (!linkVisited) {
                 stageStart = SteadyClock::now();
-                bool linkVisited = storage_.checkVisited(link);
-                stats.visitedCheckTime += elapsedSince(stageStart);
-                ++stats.visitedChecks;
-
-                if (!linkVisited) {
-                    stageStart = SteadyClock::now();
-                    frontier_.push(link);
-                    stats.frontierPushTime += elapsedSince(stageStart);
-                    ++stats.frontierPushes;
-                }
+                frontier_.push(link);
+                stats.frontierPushTime += elapsedSince(stageStart);
+                ++stats.frontierPushes;
             }
         }
 
@@ -399,7 +433,6 @@ void Crawler::fetchPage(
 
     cv_.notify_all();
 }
-
 
 void Crawler::processUrl(
     std::string& url,
