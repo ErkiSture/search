@@ -1,21 +1,43 @@
 #include <string>
 #include <iostream>
-#include <queue>
 #include <thread>
 #include <chrono>
 #include <mutex>
 #include <condition_variable>
 #include <vector>
 #include <optional>
+#include <iomanip>
 
-#include "storage/storage.h"
-#include "index/indexer.h"
 #include "crawler.h"
-#include "domainManager.h"
-#include "utils/systemClock.h"
-#include "net/httpClient.h"
-#include "net/curlHttpClient.h"
-#include "frontier.h"
+
+namespace {
+
+    using SteadyClock = std::chrono::steady_clock;
+
+    std::chrono::nanoseconds elapsedSince(
+        SteadyClock::time_point start
+    ) {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(
+            SteadyClock::now() - start
+        );
+    }
+
+    double toMilliseconds(std::chrono::nanoseconds duration) {
+        return std::chrono::duration<double, std::milli>(duration).count();
+    }
+
+    void printTime(
+        const std::string& name,
+        std::chrono::nanoseconds duration
+    ) {
+        std::cout << "  " << std::left << std::setw(22) << name
+            << ": " << std::right << std::fixed
+            << std::setprecision(2)
+            << toMilliseconds(duration) << " ms\n";
+    }
+
+} // namespace
+
 
 Crawler::Crawler(
     Storage& storage,
@@ -29,37 +51,65 @@ Crawler::Crawler(
     int maxPages,
     int workerCount
 )
-    : storage_(storage),
+    : workerCount_(workerCount),
+    maxPages_(maxPages),
+    workerStats_(
+        workerCount > 0
+        ? static_cast<std::size_t>(workerCount)
+        : 0
+    ),
+    storage_(storage),
     domainManager_(domainManager),
     clock_(clock),
     httpClient_(httpClient),
     htmlParser_(htmlParser),
     urlProcessor_(urlProcessor),
     pageScorer_(pageScorer),
-    indexer_(indexer),
-    maxPages_(maxPages),
-    workerCount_(workerCount)
+    indexer_(indexer)
 {
 }
 
-void Crawler::scheduleRetry(const std::string& url)
-{
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (storage_.checkVisited(url)) {
-            return;
-        }
 
-        auto readyAt = domainManager_.nextAllowedRequestTime(url);
-        frontier_.schedule(url, readyAt);
+void Crawler::scheduleRetry(
+    const std::string& url,
+    WorkerStats& stats
+) {
+    auto waitStart = SteadyClock::now();
+    std::unique_lock<std::mutex> lock(mutex_);
+    stats.mutexWaitTime += elapsedSince(waitStart);
+
+    auto holdStart = SteadyClock::now();
+
+    if (storage_.checkVisited(url)) {
+        stats.visitedCheckTime += elapsedSince(holdStart);
+        ++stats.visitedChecks;
+
+        stats.mutexHoldTime += elapsedSince(holdStart);
+        return;
     }
 
+    auto readyAt = domainManager_.nextAllowedRequestTime(url);
+    frontier_.schedule(url, readyAt);
+
+    stats.mutexHoldTime += elapsedSince(holdStart);
+
+    lock.unlock();
     cv_.notify_all();
 }
 
+
 std::optional<std::string> Crawler::getNextUrl(
-    std::unique_lock<std::mutex>& lock)
-{
+    std::unique_lock<std::mutex>& lock,
+    WorkerStats& stats
+) {
+    // The caller already owns mutex_.
+    // Measure only time spent holding the lock inside this function.
+    auto holdStart = SteadyClock::now();
+
+    auto finishHold = [&]() {
+        stats.mutexHoldTime += elapsedSince(holdStart);
+        };
+
     while (true) {
         std::cout
             << "[STATE]"
@@ -70,23 +120,41 @@ std::optional<std::string> Crawler::getNextUrl(
             << " Robots: " << frontier_.robotsWaitingSize()
             << '\n';
 
-        if (storage_.countSaved() >= static_cast<size_t>(maxPages_)) {
+        std::size_t saved = storage_.countSaved();
+
+        // A negative maxPages_ means unlimited.
+        if (maxPages_ >= 0 &&
+            saved >= static_cast<std::size_t>(maxPages_)) {
+            finishHold();
             return std::nullopt;
         }
 
         frontier_.promoteReadyUrls(clock_.now());
 
         if (auto url = frontier_.tryGetNextUrl()) {
-            if (storage_.checkVisited(*url)) {
+            auto visitedStart = SteadyClock::now();
+            bool visited = storage_.checkVisited(*url);
+
+            stats.visitedCheckTime += elapsedSince(visitedStart);
+            ++stats.visitedChecks;
+
+            if (visited) {
                 continue;
             }
 
+            finishHold();
             return url;
         }
 
         // Wait until the earliest delayed URL becomes ready.
         if (auto readyAt = frontier_.nextReadyAt()) {
+            finishHold();
+
+            auto waitStart = SteadyClock::now();
             cv_.wait_until(lock, *readyAt);
+            stats.frontierWait += elapsedSince(waitStart);
+
+            holdStart = SteadyClock::now();
             continue;
         }
 
@@ -94,36 +162,65 @@ std::optional<std::string> Crawler::getNextUrl(
         // something and no URLs are waiting for robots.txt.
         if (activeWorkers == 0) {
             if (!frontier_.hasRobotsWaiters()) {
+                finishHold();
                 return std::nullopt;
             }
 
-            // Robots fetch is still in progress. Wait for its result.
+            finishHold();
+
+            auto waitStart = SteadyClock::now();
             cv_.wait(lock);
+            stats.frontierWait += elapsedSince(waitStart);
+
+            holdStart = SteadyClock::now();
             continue;
         }
 
+        finishHold();
+
+        auto waitStart = SteadyClock::now();
         cv_.wait(lock);
+        stats.frontierWait += elapsedSince(waitStart);
+
+        holdStart = SteadyClock::now();
     }
 }
 
-void Crawler::fetchRobots(const std::string& url)
-{
+
+void Crawler::fetchRobots(
+    const std::string& url,
+    WorkerStats& stats
+) {
     std::string robotsUrl;
 
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        auto waitStart = SteadyClock::now();
+        std::unique_lock<std::mutex> lock(mutex_);
+        stats.mutexWaitTime += elapsedSince(waitStart);
+
+        auto holdStart = SteadyClock::now();
         robotsUrl = domainManager_.getRobotsUrl(url);
+        stats.mutexHoldTime += elapsedSince(holdStart);
     }
 
-    auto start = clock_.now();
+    // HTTP request happens outside the mutex.
+    auto fetchStart = SteadyClock::now();
     auto result = httpClient_.fetchUrl(robotsUrl);
+    auto fetchDuration = elapsedSince(fetchStart);
 
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        clock_.now() - start
-    );
+    stats.robotsFetch += fetchDuration;
+
+    auto fetchMilliseconds =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            fetchDuration
+        );
 
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        auto waitStart = SteadyClock::now();
+        std::unique_lock<std::mutex> lock(mutex_);
+        stats.mutexWaitTime += elapsedSince(waitStart);
+
+        auto holdStart = SteadyClock::now();
 
         // A failed robots.txt request is treated as empty rules.
         domainManager_.saveRobotsResult(
@@ -131,11 +228,19 @@ void Crawler::fetchRobots(const std::string& url)
             result.success ? result.data : ""
         );
 
-        sumFetchTime_ += duration.count();
+        sumFetchTime_ += fetchMilliseconds.count();
 
         // Retry the URL that triggered the robots request.
-        if (!storage_.checkVisited(url)) {
+        auto visitedStart = SteadyClock::now();
+        bool visited = storage_.checkVisited(url);
+        stats.visitedCheckTime += elapsedSince(visitedStart);
+        ++stats.visitedChecks;
+
+        if (!visited) {
+            auto pushStart = SteadyClock::now();
             frontier_.push(url);
+            stats.frontierPushTime += elapsedSince(pushStart);
+            ++stats.frontierPushes;
         }
 
         // Release URLs waiting for robots.txt for this domain.
@@ -143,81 +248,171 @@ void Crawler::fetchRobots(const std::string& url)
         auto waitingUrls = frontier_.releaseRobotsWaiters(domain);
 
         for (const auto& waitingUrl : waitingUrls) {
-            if (!storage_.checkVisited(waitingUrl)) {
+            visitedStart = SteadyClock::now();
+            visited = storage_.checkVisited(waitingUrl);
+            stats.visitedCheckTime += elapsedSince(visitedStart);
+            ++stats.visitedChecks;
+
+            if (!visited) {
+                auto pushStart = SteadyClock::now();
                 frontier_.push(waitingUrl);
+                stats.frontierPushTime += elapsedSince(pushStart);
+                ++stats.frontierPushes;
             }
         }
+
+        stats.mutexHoldTime += elapsedSince(holdStart);
     }
 
     cv_.notify_all();
 }
 
-void Crawler::fetchPage(const std::string& url)
-{
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
 
-        if (storage_.checkVisited(url)) {
+void Crawler::fetchPage(
+    const std::string& url,
+    WorkerStats& stats
+) {
+    // First critical section: check and mark the URL.
+    {
+        auto waitStart = SteadyClock::now();
+        std::unique_lock<std::mutex> lock(mutex_);
+        stats.mutexWaitTime += elapsedSince(waitStart);
+
+        auto holdStart = SteadyClock::now();
+
+        auto visitedStart = SteadyClock::now();
+        bool visited = storage_.checkVisited(url);
+        stats.visitedCheckTime += elapsedSince(visitedStart);
+        ++stats.visitedChecks;
+
+        if (visited) {
+            stats.mutexHoldTime += elapsedSince(holdStart);
             return;
         }
-        else {
-            storage_.markFetching(url);
-        }
 
+        storage_.markFetching(url);
         domainManager_.saveRequest(url);
+
+        stats.mutexHoldTime += elapsedSince(holdStart);
     }
 
-    auto start = clock_.now();
+    // Perform HTTP request without holding the crawler mutex.
+    auto fetchStart = SteadyClock::now();
     auto result = httpClient_.fetchUrl(url);
+    auto fetchDuration = elapsedSince(fetchStart);
 
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        clock_.now() - start
-    );
+    stats.httpFetch += fetchDuration;
 
+    auto fetchMilliseconds =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            fetchDuration
+        );
+
+    // Second critical section: process and save the result.
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        auto waitStart = SteadyClock::now();
+        std::unique_lock<std::mutex> lock(mutex_);
+        stats.mutexWaitTime += elapsedSince(waitStart);
 
-        sumFetchTime_ += duration.count();
+        auto holdStart = SteadyClock::now();
+
+        sumFetchTime_ += fetchMilliseconds.count();
 
         if (!result.success) {
             storage_.markFailed(url);
+
+            stats.mutexHoldTime += elapsedSince(holdStart);
+            lock.unlock();
+
             cv_.notify_all();
             return;
         }
 
+        // Parse HTML.
+        auto stageStart = SteadyClock::now();
         ParsedPage parsedPage = htmlParser_.parse(result.data);
+        stats.parseTime += elapsedSince(stageStart);
+        ++stats.pagesParsed;
 
-        double relevance = pageScorer_.score(parsedPage.title, parsedPage.text);
+        // Score page relevance.
+        stageStart = SteadyClock::now();
+        double relevance = pageScorer_.score(
+            parsedPage.title,
+            parsedPage.text
+        );
+        stats.scoringTime += elapsedSince(stageStart);
 
+        // Mark and save page content.
         storage_.markFetched(url);
-        storage_.savePageContent(url, parsedPage.title, parsedPage.description, parsedPage.text);
 
+        stageStart = SteadyClock::now();
+        storage_.savePageContent(
+            url,
+            parsedPage.title,
+            parsedPage.description,
+            parsedPage.text
+        );
+        stats.saveContentTime += elapsedSince(stageStart);
+
+        // Index page if it meets the crawl policy.
         if (crawlPolicy_.shouldIndex(parsedPage, relevance)) {
+            stageStart = SteadyClock::now();
             PageIndex pageIndex = indexer_.indexPage(parsedPage.text);
+            stats.indexTime += elapsedSince(stageStart);
+
+            stageStart = SteadyClock::now();
             storage_.savePageIndex(url, pageIndex);
+            stats.saveIndexTime += elapsedSince(stageStart);
+
+            ++stats.pagesIndexed;
         }
 
-        if (crawlPolicy_.shouldExplore(relevance, frontier_.frontierSize())) {
-            std::vector<std::string> links = urlProcessor_.process(parsedPage.links, url);
+        // Extract and enqueue links if the page is worth exploring.
+        if (crawlPolicy_.shouldExplore(
+            relevance,
+            frontier_.frontierSize()
+        )) {
+            stageStart = SteadyClock::now();
+            std::vector<std::string> links =
+                urlProcessor_.process(parsedPage.links, url);
+            stats.urlProcessingTime += elapsedSince(stageStart);
+
             for (const std::string& link : links) {
-                if (!storage_.checkVisited(link)) {
+                ++stats.linksProcessed;
+
+                stageStart = SteadyClock::now();
+                bool linkVisited = storage_.checkVisited(link);
+                stats.visitedCheckTime += elapsedSince(stageStart);
+                ++stats.visitedChecks;
+
+                if (!linkVisited) {
+                    stageStart = SteadyClock::now();
                     frontier_.push(link);
+                    stats.frontierPushTime += elapsedSince(stageStart);
+                    ++stats.frontierPushes;
                 }
             }
         }
+
+        stats.mutexHoldTime += elapsedSince(holdStart);
     }
-
-
 
     cv_.notify_all();
 }
 
-void Crawler::processUrl(std::string& url)
-{
+
+void Crawler::processUrl(
+    std::string& url,
+    WorkerStats& stats
+) {
     RequestStatus status;
 
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        auto waitStart = SteadyClock::now();
+        std::unique_lock<std::mutex> lock(mutex_);
+        stats.mutexWaitTime += elapsedSince(waitStart);
+
+        auto holdStart = SteadyClock::now();
 
         status = domainManager_.check(url);
 
@@ -225,58 +420,83 @@ void Crawler::processUrl(std::string& url)
             std::string domain = domainManager_.getDomain(url);
             frontier_.waitForRobots(domain, url);
         }
+
+        stats.mutexHoldTime += elapsedSince(holdStart);
     }
 
     switch (status) {
     case RequestStatus::Disallowed:
+        ++stats.disallowed;
         break;
 
     case RequestStatus::WaitForRobots:
-        // fetchRobots() will requeue this URL when robots.txt finishes.
+        ++stats.waitForRobots;
         break;
 
     case RequestStatus::RateLimited:
-        scheduleRetry(url);
+        ++stats.rateLimited;
+        scheduleRetry(url, stats);
         break;
 
     case RequestStatus::FetchRobots:
-        fetchRobots(url);
+        ++stats.fetchRobots;
+        fetchRobots(url, stats);
         break;
 
     case RequestStatus::Allowed:
-        fetchPage(url);
+        ++stats.allowed;
+        fetchPage(url, stats);
         break;
     }
 }
 
-void Crawler::worker()
-{
-    while (true) {
-        std::unique_lock<std::mutex> lock(mutex_);
 
-        auto url = getNextUrl(lock);
+void Crawler::worker(int workerId)
+{
+    WorkerStats& stats =
+        workerStats_[static_cast<std::size_t>(workerId)];
+
+    while (true) {
+        auto waitStart = SteadyClock::now();
+        std::unique_lock<std::mutex> lock(mutex_);
+        stats.mutexWaitTime += elapsedSince(waitStart);
+
+        auto url = getNextUrl(lock, stats);
 
         if (!url.has_value()) {
-            std::cout << "[WORKER] Exiting. Active: "
-                << activeWorkers << "\n";
-
+            std::cout << "[WORKER " << workerId
+                << "] Exiting. Active: "
+                << activeWorkers << '\n';
             return;
         }
 
+        auto holdStart = SteadyClock::now();
+
         // This worker now owns a URL and is processing it.
         ++activeWorkers;
+        ++stats.urlsProcessed;
+
+        stats.mutexHoldTime += elapsedSince(holdStart);
 
         lock.unlock();
 
-        processUrl(*url);
+        auto processStart = SteadyClock::now();
+        processUrl(*url, stats);
+        stats.processing += elapsedSince(processStart);
 
+        waitStart = SteadyClock::now();
         lock.lock();
-        --activeWorkers;
-        lock.unlock();
+        stats.mutexWaitTime += elapsedSince(waitStart);
 
+        holdStart = SteadyClock::now();
+        --activeWorkers;
+        stats.mutexHoldTime += elapsedSince(holdStart);
+
+        lock.unlock();
         cv_.notify_all();
     }
 }
+
 
 void Crawler::run(const std::string& seedUrl)
 {
@@ -287,7 +507,7 @@ void Crawler::run(const std::string& seedUrl)
         frontier_.push(seedUrl);
     }
 
-    auto start = std::chrono::steady_clock::now();
+    auto start = SteadyClock::now();
 
     std::cout << "--------------------\n";
     std::cout << "CRAWL START\n";
@@ -295,25 +515,105 @@ void Crawler::run(const std::string& seedUrl)
 
     std::vector<std::thread> workers;
 
+    if (workerCount_ > 0) {
+        workers.reserve(static_cast<std::size_t>(workerCount_));
+    }
+
     for (int i = 0; i < workerCount_; ++i) {
-        workers.emplace_back(&Crawler::worker, this);
+        workers.emplace_back(&Crawler::worker, this, i);
     }
 
     for (auto& workerThread : workers) {
         workerThread.join();
     }
 
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - start
-    );
+    auto totalDuration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            SteadyClock::now() - start
+        );
 
-    std::cout << "Saving frontier(" << frontier_.frontierSize() << " entries)" << std::endl;
+    std::cout << "\n====================\n";
+    std::cout << "WORKER STATISTICS\n";
+    std::cout << "====================\n";
+
+    for (std::size_t i = 0; i < workerStats_.size(); ++i) {
+        const WorkerStats& stats = workerStats_[i];
+
+        std::cout << "\nWorker " << i << '\n';
+
+        printTime("Frontier wait", stats.frontierWait);
+        printTime("HTTP fetch", stats.httpFetch);
+        printTime("Robots fetch", stats.robotsFetch);
+        printTime("Processing", stats.processing);
+
+        std::cout << "\n  Stage timings:\n";
+
+        printTime("Parse", stats.parseTime);
+        printTime("Scoring", stats.scoringTime);
+        printTime("Save content", stats.saveContentTime);
+        printTime("Index", stats.indexTime);
+        printTime("Save index", stats.saveIndexTime);
+        printTime("URL processing", stats.urlProcessingTime);
+        printTime("Visited checks", stats.visitedCheckTime);
+        printTime("Frontier pushes", stats.frontierPushTime);
+
+        std::cout << "\n  Mutex timings:\n";
+
+        printTime("Mutex wait", stats.mutexWaitTime);
+        printTime("Mutex hold", stats.mutexHoldTime);
+
+        std::cout << "\n  Counters:\n";
+
+        std::cout << "  URLs processed: "
+            << stats.urlsProcessed << '\n';
+        std::cout << "  Pages parsed: "
+            << stats.pagesParsed << '\n';
+        std::cout << "  Pages indexed: "
+            << stats.pagesIndexed << '\n';
+        std::cout << "  Links processed: "
+            << stats.linksProcessed << '\n';
+        std::cout << "  Visited checks: "
+            << stats.visitedChecks << '\n';
+        std::cout << "  Frontier pushes: "
+            << stats.frontierPushes << '\n';
+
+        std::cout << "\n  Request statuses:\n";
+
+        std::cout << "  Allowed: "
+            << stats.allowed << '\n';
+        std::cout << "  Rate limited: "
+            << stats.rateLimited << '\n';
+        std::cout << "  Wait for robots: "
+            << stats.waitForRobots << '\n';
+        std::cout << "  Fetch robots: "
+            << stats.fetchRobots << '\n';
+        std::cout << "  Disallowed: "
+            << stats.disallowed << '\n';
+    }
+
+    std::cout << "\n====================\n";
+    std::cout << "CRAWL SUMMARY\n";
+    std::cout << "====================\n";
+
+    std::cout << "Saving frontier ("
+        << frontier_.frontierSize()
+        << " entries)\n";
+
     storage_.saveFrontier(frontier_);
-    
-    std::cout << "total: " << sumFetchTime_ << " ms\n";
+
+    std::cout << "Total fetch time: "
+        << sumFetchTime_ << " ms\n";
+
+    std::cout << "Crawl duration: "
+        << totalDuration.count() << " ms\n";
+
+    std::cout << "Frontier size: "
+        << frontier_.frontierSize() << '\n';
+
+    std::cout << "Domain manager size: "
+        << domainManager_.domains_.size() << '\n';
+
     std::cout << "--------------------\n";
-    std::cout << "CRAWL END, took " << duration.count() << " ms\n";
-    std::cout << "Frontier size: " << frontier_.frontierSize() << "\n";
-    std::cout << "Domain manager size: " << domainManager_.domains_.size() << "\n";
+    std::cout << "CRAWL END\n";
     std::cout << "--------------------\n";
 }
