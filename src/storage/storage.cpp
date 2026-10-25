@@ -149,6 +149,9 @@ void Storage::initializeDatabase()
 
 		CREATE INDEX IF NOT EXISTS idx_postings_url
 		ON postings(url);
+
+		CREATE INDEX IF NOT EXISTS idx_postings_word_id 
+		ON postings(word_id);
 	)";
 
 	if (sqlite3_exec(db_, sql, nullptr, nullptr, &error) != SQLITE_OK) {
@@ -465,16 +468,16 @@ PostingList Storage::loadIndexOfWord(const std::string& word)
 {
 	PostingList postingList;
 	sqlite3_stmt* stmt = nullptr;
-	int result = SQLITE_OK;
 
-	// Find the word ID.
-	const char* sqlWord = R"(
-        SELECT id
-        FROM words
-        WHERE word = ?;
+	const char* sql = R"(
+        SELECT p.url, p.frequency
+        FROM words w
+        JOIN postings p ON p.word_id = w.id
+        WHERE w.word = ?;
     )";
 
-	result = sqlite3_prepare_v2(db_, sqlWord, -1, &stmt, nullptr);
+	int result = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
+
 	if (result != SQLITE_OK) {
 		throw std::runtime_error(sqlite3_errmsg(db_));
 	}
@@ -482,42 +485,7 @@ PostingList Storage::loadIndexOfWord(const std::string& word)
 	result = sqlite3_bind_text(
 		stmt, 1, word.c_str(), -1, SQLITE_TRANSIENT
 	);
-	if (result != SQLITE_OK) {
-		sqlite3_finalize(stmt);
-		throw std::runtime_error(sqlite3_errmsg(db_));
-	}
 
-	result = sqlite3_step(stmt);
-
-	if (result == SQLITE_DONE) {
-		sqlite3_finalize(stmt);
-		return postingList; // Word doesn't exist.
-	}
-
-	if (result != SQLITE_ROW) {
-		sqlite3_finalize(stmt);
-		throw std::runtime_error(sqlite3_errmsg(db_));
-	}
-
-	int wordId = sqlite3_column_int(stmt, 0);
-	sqlite3_finalize(stmt);
-	stmt = nullptr;
-
-	// Load postings for this word.
-	const char* sqlPostings = R"(
-        SELECT url, frequency
-        FROM postings
-        WHERE word_id = ?;
-    )";
-
-	result = sqlite3_prepare_v2(
-		db_, sqlPostings, -1, &stmt, nullptr
-	);
-	if (result != SQLITE_OK) {
-		throw std::runtime_error(sqlite3_errmsg(db_));
-	}
-
-	result = sqlite3_bind_int(stmt, 1, wordId);
 	if (result != SQLITE_OK) {
 		sqlite3_finalize(stmt);
 		throw std::runtime_error(sqlite3_errmsg(db_));
