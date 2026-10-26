@@ -152,6 +152,9 @@ void Storage::initializeDatabase()
 
 		CREATE INDEX IF NOT EXISTS idx_postings_word_id 
 		ON postings(word_id);
+
+		CREATE INDEX IF NOT EXISTS idx_postings_word_id_url_frequency
+		ON postings(word_id, url, frequency);
 	)";
 
 	if (sqlite3_exec(db_, sql, nullptr, nullptr, &error) != SQLITE_OK) {
@@ -226,38 +229,6 @@ std::string Storage::loadPage(const std::string& url)
 	return content;
 }
 
-Index Storage::loadIndex()
-{
-	Index index;
-
-	const char* sql = R"(
-        SELECT words.word, postings.url, postings.frequency
-        FROM words
-        JOIN postings ON words.id = postings.word_id
-    )";
-
-	sqlite3_stmt* stmt;
-	if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-		std::cerr << "Failed to load index: " << sqlite3_errmsg(db_) << '\n';
-		return index;
-	}
-
-	while (sqlite3_step(stmt) == SQLITE_ROW) {
-		std::string word = reinterpret_cast<const char*>(
-			sqlite3_column_text(stmt, 0));
-
-		std::string url = reinterpret_cast<const char*>(
-			sqlite3_column_text(stmt, 1));
-
-		int frequency = sqlite3_column_int(stmt, 2);
-
-		index[word][url] = frequency;
-	}
-
-	sqlite3_finalize(stmt);
-	return index;
-}
-
 std::unordered_set<std::string> Storage::loadVisitedUrls()
 {
 	std::unordered_set<std::string> urls;
@@ -282,83 +253,6 @@ std::unordered_set<std::string> Storage::loadVisitedUrls()
 
 	return urls;
 }
-
-void Storage::saveIndex(const Index& index)
-{
-	char* error = nullptr;
-
-	if (sqlite3_exec(db_, "BEGIN TRANSACTION", nullptr, nullptr, &error) != SQLITE_OK) {
-		std::string msg = error ? error : sqlite3_errmsg(db_);
-		sqlite3_free(error);
-		throw std::runtime_error(msg);
-	}
-
-	sqlite3_stmt* insertWord = nullptr;
-	sqlite3_stmt* selectWord = nullptr;
-	sqlite3_stmt* insertPosting = nullptr;
-
-	try {
-		sqlite3_prepare_v2(db_,
-			"INSERT OR IGNORE INTO words (word) VALUES (?)",
-			-1, &insertWord, nullptr);
-
-		sqlite3_prepare_v2(db_,
-			"SELECT id FROM words WHERE word = ?",
-			-1, &selectWord, nullptr);
-
-		sqlite3_prepare_v2(db_,
-			"INSERT INTO postings (word_id, url, frequency) VALUES (?, ?, ?) "
-			"ON CONFLICT(word_id, url) DO UPDATE SET frequency = excluded.frequency",
-			-1, &insertPosting, nullptr);
-
-		for (const auto& [word, postings] : index) {
-			sqlite3_bind_text(insertWord, 1, word.c_str(), -1, SQLITE_TRANSIENT);
-			if (sqlite3_step(insertWord) != SQLITE_DONE)
-				throw std::runtime_error(sqlite3_errmsg(db_));
-
-			sqlite3_reset(insertWord);
-			sqlite3_clear_bindings(insertWord);
-
-			sqlite3_bind_text(selectWord, 1, word.c_str(), -1, SQLITE_TRANSIENT);
-			if (sqlite3_step(selectWord) != SQLITE_ROW)
-				throw std::runtime_error(sqlite3_errmsg(db_));
-
-			int wordId = sqlite3_column_int(selectWord, 0);
-			sqlite3_reset(selectWord);
-			sqlite3_clear_bindings(selectWord);
-
-			for (const auto& [url, frequency] : postings) {
-				sqlite3_bind_int(insertPosting, 1, wordId);
-				sqlite3_bind_text(insertPosting, 2, url.c_str(), -1, SQLITE_TRANSIENT);
-				sqlite3_bind_int(insertPosting, 3, frequency);
-
-				if (sqlite3_step(insertPosting) != SQLITE_DONE)
-					throw std::runtime_error(sqlite3_errmsg(db_));
-
-				sqlite3_reset(insertPosting);
-				sqlite3_clear_bindings(insertPosting);
-			}
-		}
-
-		sqlite3_finalize(insertWord);
-		sqlite3_finalize(selectWord);
-		sqlite3_finalize(insertPosting);
-
-		if (sqlite3_exec(db_, "COMMIT", nullptr, nullptr, &error) != SQLITE_OK) {
-			std::string msg = error ? error : sqlite3_errmsg(db_);
-			sqlite3_free(error);
-			throw std::runtime_error(msg);
-		}
-	}
-	catch (...) {
-		sqlite3_finalize(insertWord);
-		sqlite3_finalize(selectWord);
-		sqlite3_finalize(insertPosting);
-		sqlite3_exec(db_, "ROLLBACK", nullptr, nullptr, nullptr);
-		throw;
-	}
-}
-
 
 void Storage::savePageIndex(
 	const std::string& url,
@@ -538,6 +432,85 @@ std::pair<std::string, std::string> Storage::loadPageMetadata(
 	}
 
 	sqlite3_finalize(stmt);
+	return metadata;
+}
+
+std::unordered_map<std::string, std::pair<std::string, std::string>>
+Storage::loadPageMetadataBulk(const std::vector<std::string>& urls)
+{
+	std::unordered_map<std::string, std::pair<std::string, std::string>> metadata;
+
+	if (urls.empty()) {
+		return metadata;
+	}
+
+	constexpr std::size_t BATCH_SIZE = 500;
+
+	const char* sql =
+		"SELECT url, title, description "
+		"FROM pages "
+		"WHERE url IN (";
+
+	for (std::size_t i = 0; i < urls.size(); i += BATCH_SIZE) {
+		std::size_t batchEnd = std::min(i + BATCH_SIZE, urls.size());
+		std::size_t batchSize = batchEnd - i;
+
+		std::string query = sql;
+
+		for (std::size_t j = 0; j < batchSize; ++j) {
+			query += (j == 0 ? "?" : ",?");
+		}
+
+		query += ");";
+
+		sqlite3_stmt* stmt = nullptr;
+
+		int result = sqlite3_prepare_v2(
+			db_, query.c_str(), -1, &stmt, nullptr
+		);
+
+		if (result != SQLITE_OK) {
+			throw std::runtime_error(sqlite3_errmsg(db_));
+		}
+
+		for (std::size_t j = 0; j < batchSize; ++j) {
+			result = sqlite3_bind_text(
+				stmt,
+				static_cast<int>(j + 1),
+				urls[i + j].c_str(),
+				-1,
+				SQLITE_TRANSIENT
+			);
+
+			if (result != SQLITE_OK) {
+				sqlite3_finalize(stmt);
+				throw std::runtime_error(sqlite3_errmsg(db_));
+			}
+		}
+
+		while ((result = sqlite3_step(stmt)) == SQLITE_ROW) {
+			const auto* url = sqlite3_column_text(stmt, 0);
+			const auto* title = sqlite3_column_text(stmt, 1);
+			const auto* description = sqlite3_column_text(stmt, 2);
+
+			if (url != nullptr) {
+				metadata.emplace(
+					reinterpret_cast<const char*>(url),
+					std::make_pair(
+						title ? reinterpret_cast<const char*>(title) : "",
+						description ? reinterpret_cast<const char*>(description) : ""
+					)
+				);
+			}
+		}
+
+		sqlite3_finalize(stmt);
+
+		if (result != SQLITE_DONE) {
+			throw std::runtime_error(sqlite3_errmsg(db_));
+		}
+	}
+
 	return metadata;
 }
 

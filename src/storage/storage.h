@@ -33,9 +33,6 @@ public:
     std::unordered_set<std::string> loadVisitedUrls();
     std::string loadPage(const std::string& url);
 
-    Index loadIndex();
-    void saveIndex(const Index& index);
-
     void savePageIndex(
         const std::string& url,
         const PageIndex& pageIndex
@@ -46,6 +43,8 @@ public:
     std::pair<std::string, std::string> loadPageMetadata(
         const std::string& url
     );
+    std::unordered_map<std::string, std::pair<std::string, std::string>>
+        Storage::loadPageMetadataBulk(const std::vector<std::string>& urls);
 
     bool checkVisited(const std::string& url);
     void markFetching(const std::string& url);

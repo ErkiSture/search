@@ -39,25 +39,66 @@ std::vector<SearchResult> Querier::search(std::string query)
     }
 
     // Build search results
+    //auto start = std::chrono::steady_clock::now();
+
+    //std::vector<SearchResult> results;
+    //for (const auto& [url, score] : scores) {
+    //    auto [title, description] = storage_.loadPageMetadata(url);
+
+    //    results.push_back({
+    //        url,
+    //        score,
+    //        title,
+    //        description
+    //    });
+    //}
+
+    //std::sort(results.begin(), results.end(),
+    //    [](const SearchResult& a, const SearchResult& b) {
+    //        return a.score > b.score;
+    //    });
+    //auto end = std::chrono::steady_clock::now();
+    //std::cout << "Building results and sorting them took: "
+    //    << std::chrono::duration_cast<std::chrono::milliseconds>(
+    //        end - start).count()
+    //    << " ms\n\n";
+
     auto start = std::chrono::steady_clock::now();
 
-    std::vector<SearchResult> results;
+    std::vector<std::string> urls;
+    urls.reserve(scores.size());
+
     for (const auto& [url, score] : scores) {
-        auto [title, description] = storage_.loadPageMetadata(url);
+        urls.push_back(url);
+    }
+
+    auto metadata = storage_.loadPageMetadataBulk(urls);
+
+    std::vector<SearchResult> results;
+    results.reserve(scores.size());
+
+    for (const auto& [url, score] : scores) {
+        auto it = metadata.find(url);
+
+        if (it == metadata.end()) {
+            continue;
+        }
 
         results.push_back({
             url,
             score,
-            title,
-            description
-        });
+            it->second.first,
+            it->second.second
+            });
     }
 
     std::sort(results.begin(), results.end(),
         [](const SearchResult& a, const SearchResult& b) {
             return a.score > b.score;
         });
+
     auto end = std::chrono::steady_clock::now();
+
     std::cout << "Building results and sorting them took: "
         << std::chrono::duration_cast<std::chrono::milliseconds>(
             end - start).count()

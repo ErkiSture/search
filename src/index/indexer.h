@@ -11,7 +11,6 @@ class Storage;
 class Indexer {
 public:
 	explicit Indexer(Storage& storage);
-	Index buildIndexFromStorage();
 	
 	PageIndex indexPage(const std::string text);
 
