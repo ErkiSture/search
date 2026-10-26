@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <atomic>
+#include <utility>
 
 #include "storage/storage.h"
 #include "index/indexer.h"
@@ -49,14 +50,11 @@ struct DatabaseStats {
 
 
 struct WorkerStats {
-    // Database timings
     DatabaseStats database;
 
-    // Aggregate mutex timings
     std::chrono::nanoseconds mutexWaitTime{};
     std::chrono::nanoseconds mutexHoldTime{};
 
-    // Stage timings
     std::chrono::nanoseconds frontierWait{};
     std::chrono::nanoseconds httpFetch{};
     std::chrono::nanoseconds robotsFetch{};
@@ -71,7 +69,6 @@ struct WorkerStats {
     std::chrono::nanoseconds visitedCheckTime{};
     std::chrono::nanoseconds frontierPushTime{};
 
-    // Lock section timings
     LockSectionStats getNextUrlLock;
     LockSectionStats processUrlLock;
     LockSectionStats fetchPageStartLock;
@@ -82,7 +79,6 @@ struct WorkerStats {
     LockSectionStats scheduleRetryLock;
     LockSectionStats workerBookkeepingLock;
 
-    // Counters
     std::size_t urlsProcessed = 0;
     std::size_t pagesParsed = 0;
     std::size_t pagesIndexed = 0;
@@ -90,7 +86,6 @@ struct WorkerStats {
     std::size_t visitedChecks = 0;
     std::size_t frontierPushes = 0;
 
-    // Request statuses
     std::size_t allowed = 0;
     std::size_t rateLimited = 0;
     std::size_t waitForRobots = 0;
@@ -117,6 +112,8 @@ public:
     void run(const std::string& seedUrl);
 
 private:
+    static constexpr std::size_t INDEX_BATCH_SIZE = 10;
+
     std::optional<std::string> getNextUrl(
         std::unique_lock<std::mutex>& lock,
         WorkerStats& stats
@@ -135,6 +132,8 @@ private:
         WorkerStats& stats
     );
 
+    void flushIndexBatch(WorkerStats& stats);
+
     void scheduleRetry(
         const std::string& url,
         WorkerStats& stats
@@ -148,6 +147,10 @@ private:
     std::atomic<std::size_t> savedCount_{ 0 };
 
     std::vector<WorkerStats> workerStats_;
+
+    // Accessed only while mutex_ is held, except the final flush after
+    // all worker threads have joined.
+    std::vector<std::pair<std::string, PageIndex>> pendingIndexBatch_;
 
     Storage& storage_;
     DomainManager& domainManager_;

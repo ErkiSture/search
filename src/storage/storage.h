@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "index/index.h"
 #include "crawl/frontier.h"
@@ -37,6 +38,9 @@ public:
         const std::string& url,
         const PageIndex& pageIndex
     );
+
+    void Storage::savePagesIndex(
+        const std::vector<std::pair<std::string, PageIndex>>& pages);
 
     PostingList loadIndexOfWord(const std::string& word);
 

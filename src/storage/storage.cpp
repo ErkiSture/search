@@ -150,9 +150,6 @@ void Storage::initializeDatabase()
 		CREATE INDEX IF NOT EXISTS idx_postings_url
 		ON postings(url);
 
-		CREATE INDEX IF NOT EXISTS idx_postings_word_id 
-		ON postings(word_id);
-
 		CREATE INDEX IF NOT EXISTS idx_postings_word_id_url_frequency
 		ON postings(word_id, url, frequency);
 	)";
@@ -353,6 +350,125 @@ void Storage::savePageIndex(
 		sqlite3_finalize(wordStmt);
 		sqlite3_finalize(wordIdStmt);
 		sqlite3_finalize(postingStmt);
+		sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+		throw;
+	}
+}
+
+void Storage::savePagesIndex(
+	const std::vector<std::pair<std::string, PageIndex>>& pages)
+{
+	char* error = nullptr;
+
+	if (sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, &error)
+		!= SQLITE_OK) {
+		std::string message = error ? error : sqlite3_errmsg(db_);
+		sqlite3_free(error);
+		throw std::runtime_error(message);
+	}
+
+	sqlite3_stmt* wordStmt = nullptr;
+	sqlite3_stmt* wordIdStmt = nullptr;
+	sqlite3_stmt* postingStmt = nullptr;
+	sqlite3_stmt* deleteStmt = nullptr;
+
+	try {
+		auto prepare = [&](const char* sql, sqlite3_stmt** stmt) {
+			if (sqlite3_prepare_v2(db_, sql, -1, stmt, nullptr) != SQLITE_OK)
+				throw std::runtime_error(sqlite3_errmsg(db_));
+			};
+
+		prepare(
+			"DELETE FROM postings WHERE url = ?;",
+			&deleteStmt);
+
+		prepare(
+			"INSERT INTO words(word) VALUES (?) "
+			"ON CONFLICT(word) DO NOTHING;",
+			&wordStmt);
+
+		prepare(
+			"SELECT id FROM words WHERE word = ?;",
+			&wordIdStmt);
+
+		prepare(
+			"INSERT INTO postings(word_id, url, frequency) "
+			"VALUES (?, ?, ?) "
+			"ON CONFLICT(word_id, url) "
+			"DO UPDATE SET frequency = excluded.frequency;",
+			&postingStmt);
+
+		for (const auto& [url, pageIndex] : pages) {
+
+			// Remove stale postings.
+			sqlite3_bind_text(
+				deleteStmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
+
+			if (sqlite3_step(deleteStmt) != SQLITE_DONE)
+				throw std::runtime_error(sqlite3_errmsg(db_));
+
+			sqlite3_reset(deleteStmt);
+			sqlite3_clear_bindings(deleteStmt);
+
+			for (const auto& [word, frequency] : pageIndex) {
+
+				// Insert word if it doesn't exist.
+				sqlite3_bind_text(
+					wordStmt, 1, word.c_str(), -1, SQLITE_TRANSIENT);
+
+				if (sqlite3_step(wordStmt) != SQLITE_DONE)
+					throw std::runtime_error(sqlite3_errmsg(db_));
+
+				sqlite3_reset(wordStmt);
+				sqlite3_clear_bindings(wordStmt);
+
+				// Retrieve word ID.
+				sqlite3_bind_text(
+					wordIdStmt, 1, word.c_str(), -1, SQLITE_TRANSIENT);
+
+				if (sqlite3_step(wordIdStmt) != SQLITE_ROW)
+					throw std::runtime_error(sqlite3_errmsg(db_));
+
+				int wordId = sqlite3_column_int(wordIdStmt, 0);
+
+				sqlite3_reset(wordIdStmt);
+				sqlite3_clear_bindings(wordIdStmt);
+
+				// Insert posting.
+				sqlite3_bind_int(postingStmt, 1, wordId);
+				sqlite3_bind_text(
+					postingStmt, 2, url.c_str(), -1, SQLITE_TRANSIENT);
+				sqlite3_bind_int(postingStmt, 3, frequency);
+
+				if (sqlite3_step(postingStmt) != SQLITE_DONE)
+					throw std::runtime_error(sqlite3_errmsg(db_));
+
+				sqlite3_reset(postingStmt);
+				sqlite3_clear_bindings(postingStmt);
+			}
+		}
+
+		sqlite3_finalize(deleteStmt);
+		sqlite3_finalize(wordStmt);
+		sqlite3_finalize(wordIdStmt);
+		sqlite3_finalize(postingStmt);
+
+		deleteStmt = wordStmt = wordIdStmt = postingStmt = nullptr;
+
+		if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &error)
+			!= SQLITE_OK) {
+			std::string message = error ? error : sqlite3_errmsg(db_);
+			sqlite3_free(error);
+			error = nullptr;
+			throw std::runtime_error(message);
+		}
+	}
+	catch (...) {
+		sqlite3_finalize(deleteStmt);
+		sqlite3_finalize(wordStmt);
+		sqlite3_finalize(wordIdStmt);
+		sqlite3_finalize(postingStmt);
+
 		sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
 		throw;
 	}

@@ -432,6 +432,31 @@ void Crawler::fetchRobots(
 }
 
 
+void Crawler::flushIndexBatch(WorkerStats& stats)
+{
+    if (pendingIndexBatch_.empty()) {
+        return;
+    }
+
+    // One SQLite transaction writes all pages currently in the batch.
+    auto saveStart = SteadyClock::now();
+
+    timeDatabaseOperation(
+        stats.database.savePageIndexTime,
+        stats.database.savePageIndexCalls,
+        [&] {
+            storage_.savePagesIndex(pendingIndexBatch_);
+        }
+    );
+
+    stats.saveIndexTime += elapsedSince(saveStart);
+
+    // Clear only after the transaction succeeds. If saving throws, the
+    // pending pages remain in memory rather than being silently discarded.
+    pendingIndexBatch_.clear();
+}
+
+
 void Crawler::fetchPage(
     const std::string& url,
     WorkerStats& stats
@@ -611,19 +636,15 @@ void Crawler::fetchPage(
 
         stats.saveContentTime += elapsedSince(stageStart);
 
-        // Save the generated page index.
+        // Queue the generated page index. Every ten indexed pages are
+        // written together in one SQLite transaction.
         if (shouldIndex) {
-            stageStart = SteadyClock::now();
-
-            timeDatabaseOperation(
-                stats.database.savePageIndexTime,
-                stats.database.savePageIndexCalls,
-                [&] { storage_.savePageIndex(url, pageIndex); }
-            );
-
-            stats.saveIndexTime += elapsedSince(stageStart);
-
+            pendingIndexBatch_.emplace_back(url, std::move(pageIndex));
             ++stats.pagesIndexed;
+
+            if (pendingIndexBatch_.size() >= INDEX_BATCH_SIZE) {
+                flushIndexBatch(stats);
+            }
         }
 
         // Check and enqueue extracted links.
@@ -794,6 +815,14 @@ void Crawler::run(const std::string& seedUrl)
 
     for (auto& workerThread : workers) {
         workerThread.join();
+    }
+
+    // Workers have stopped, so it is safe to write the final batch, which
+    // may contain fewer than INDEX_BATCH_SIZE pages.
+    if (!pendingIndexBatch_.empty() && !workerStats_.empty()) {
+        // The final flush happens on the main thread; attribute its timing
+        // to worker 0 so it is still included in the existing statistics.
+        flushIndexBatch(workerStats_.front());
     }
 
     auto totalDuration =
