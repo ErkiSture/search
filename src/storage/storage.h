@@ -43,8 +43,8 @@ public:
     std::pair<std::string, std::string> loadPageMetadata(
         const std::string& url
     );
-    std::unordered_map<std::string, std::pair<std::string, std::string>>
-        Storage::loadPageMetadataBulk(const std::vector<std::string>& urls);
+    std::unordered_map<std::string, std::pair<std::string, std::string>> 
+        loadPageMetadataBulk(const std::vector<std::string>& urls);
 
     bool checkVisited(const std::string& url);
     void markFetching(const std::string& url);
