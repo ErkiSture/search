@@ -39,8 +39,7 @@ public:
         const PageIndex& pageIndex
     );
 
-    void Storage::savePagesIndex(
-        const std::vector<std::pair<std::string, PageIndex>>& pages);
+    void savePagesIndex(const std::vector<std::pair<std::string, PageIndex>>& pages);
 
     PostingList loadIndexOfWord(const std::string& word);
 
