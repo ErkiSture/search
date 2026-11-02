@@ -13,5 +13,13 @@ bool CrawlPolicy::shouldIndex(
     const ParsedPage& page,
     double relevanceScore
 ) const {
-    return relevanceScore >= 30.0 && isEnglish(page.text);
+    constexpr size_t MIN_TEXT_LENGTH = 200;
+    constexpr size_t MAX_TEXT_LENGTH = 500'000;
+
+    const size_t length = page.text.size();
+
+    return relevanceScore >= 30.0
+        && isEnglish(page.text)
+        && length >= MIN_TEXT_LENGTH
+        && length <= MAX_TEXT_LENGTH;
 }
