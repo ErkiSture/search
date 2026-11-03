@@ -4,6 +4,7 @@
 #include<filesystem>
 #include<iostream>
 #include<sqlite3.h>
+#include<unordered_map>
 
 namespace fs = std::filesystem;
 
@@ -109,6 +110,26 @@ void Storage::initializeDatabase()
 		sqlite3_free(error);
 		throw std::runtime_error("Failed to enable WAL mode: " + message);
 	}
+
+	if (sqlite3_exec(
+		db_,
+		"PRAGMA synchronous=NORMAL;",
+		nullptr,
+		nullptr,
+		&error
+	) != SQLITE_OK) {
+		std::string message = error ? error : sqlite3_errmsg(db_);
+		sqlite3_free(error);
+		throw std::runtime_error("Failed to set synchronous mode: " + message);
+	}
+
+	sqlite3_exec(
+		db_,
+		"PRAGMA cache_size = -262144;",
+		nullptr,
+		nullptr,
+		nullptr
+	);
 
 	sqlite3_busy_timeout(db_, 5000);
 
@@ -380,29 +401,37 @@ void Storage::savePagesIndex(
 
 		prepare(
 			"DELETE FROM postings WHERE url = ?;",
-			&deleteStmt);
+			&deleteStmt
+		);
 
 		prepare(
 			"INSERT INTO words(word) VALUES (?) "
 			"ON CONFLICT(word) DO NOTHING;",
-			&wordStmt);
+			&wordStmt
+		);
 
 		prepare(
 			"SELECT id FROM words WHERE word = ?;",
-			&wordIdStmt);
+			&wordIdStmt
+		);
 
 		prepare(
 			"INSERT INTO postings(word_id, url, frequency) "
 			"VALUES (?, ?, ?) "
 			"ON CONFLICT(word_id, url) "
 			"DO UPDATE SET frequency = excluded.frequency;",
-			&postingStmt);
+			&postingStmt
+		);
+
+		// Cache word IDs across all pages in this batch.
+		std::unordered_map<std::string, int> wordIdCache;
 
 		for (const auto& [url, pageIndex] : pages) {
 
 			// Remove stale postings.
 			sqlite3_bind_text(
-				deleteStmt, 1, url.c_str(), -1, SQLITE_TRANSIENT);
+				deleteStmt, 1, url.c_str(), -1, SQLITE_TRANSIENT
+			);
 
 			if (sqlite3_step(deleteStmt) != SQLITE_DONE)
 				throw std::runtime_error(sqlite3_errmsg(db_));
@@ -412,32 +441,48 @@ void Storage::savePagesIndex(
 
 			for (const auto& [word, frequency] : pageIndex) {
 
-				// Insert word if it doesn't exist.
-				sqlite3_bind_text(
-					wordStmt, 1, word.c_str(), -1, SQLITE_TRANSIENT);
+				int wordId;
 
-				if (sqlite3_step(wordStmt) != SQLITE_DONE)
-					throw std::runtime_error(sqlite3_errmsg(db_));
+				auto it = wordIdCache.find(word);
 
-				sqlite3_reset(wordStmt);
-				sqlite3_clear_bindings(wordStmt);
+				if (it != wordIdCache.end()) {
+					// Word already looked up during this batch.
+					wordId = it->second;
+				}
+				else {
+					// Insert word if it doesn't exist.
+					sqlite3_bind_text(
+						wordStmt, 1, word.c_str(), -1, SQLITE_TRANSIENT
+					);
 
-				// Retrieve word ID.
-				sqlite3_bind_text(
-					wordIdStmt, 1, word.c_str(), -1, SQLITE_TRANSIENT);
+					if (sqlite3_step(wordStmt) != SQLITE_DONE)
+						throw std::runtime_error(sqlite3_errmsg(db_));
 
-				if (sqlite3_step(wordIdStmt) != SQLITE_ROW)
-					throw std::runtime_error(sqlite3_errmsg(db_));
+					sqlite3_reset(wordStmt);
+					sqlite3_clear_bindings(wordStmt);
 
-				int wordId = sqlite3_column_int(wordIdStmt, 0);
+					// Retrieve word ID.
+					sqlite3_bind_text(
+						wordIdStmt, 1, word.c_str(), -1, SQLITE_TRANSIENT
+					);
 
-				sqlite3_reset(wordIdStmt);
-				sqlite3_clear_bindings(wordIdStmt);
+					if (sqlite3_step(wordIdStmt) != SQLITE_ROW)
+						throw std::runtime_error(sqlite3_errmsg(db_));
+
+					wordId = sqlite3_column_int(wordIdStmt, 0);
+
+					sqlite3_reset(wordIdStmt);
+					sqlite3_clear_bindings(wordIdStmt);
+
+					// Remember it for the remaining pages.
+					wordIdCache.emplace(word, wordId);
+				}
 
 				// Insert posting.
 				sqlite3_bind_int(postingStmt, 1, wordId);
 				sqlite3_bind_text(
-					postingStmt, 2, url.c_str(), -1, SQLITE_TRANSIENT);
+					postingStmt, 2, url.c_str(), -1, SQLITE_TRANSIENT
+				);
 				sqlite3_bind_int(postingStmt, 3, frequency);
 
 				if (sqlite3_step(postingStmt) != SQLITE_DONE)
