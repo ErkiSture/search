@@ -160,19 +160,16 @@ void Storage::initializeDatabase()
 			word_id INTEGER NOT NULL,
 			url TEXT NOT NULL,
 			frequency INTEGER NOT NULL,
-			PRIMARY KEY (word_id, url)
+			PRIMARY KEY (url, word_id)
 		);
 
 		CREATE TABLE IF NOT EXISTS domains (
 			host TEXT PRIMARY KEY,
 			robots_txt TEXT
 		);
-
-		CREATE INDEX IF NOT EXISTS idx_postings_url
-		ON postings(url);
-
-		CREATE INDEX IF NOT EXISTS idx_postings_word_id_url_frequency
-		ON postings(word_id, url, frequency);
+		
+		CREATE INDEX IF NOT EXISTS idx_postings_url_word_id_frequency
+		ON postings(url, word_id, frequency);
 	)";
 
 	if (sqlite3_exec(db_, sql, nullptr, nullptr, &error) != SQLITE_OK) {
