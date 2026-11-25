@@ -5,6 +5,8 @@
 #include <iostream>
 #include <string>
 
+constexpr size_t MAX_RESPONSE_SIZE = 1 * 1024 * 1024; // 10 MB
+
 size_t CurlHttpClient::write_callback(
     char* ptr,
     size_t size,
@@ -12,7 +14,19 @@ size_t CurlHttpClient::write_callback(
     std::string* response
 ) {
     const size_t bytes = size * nmemb;
-    response->append(ptr, bytes);
+
+    // Prevent very large websites from passing through
+    if (bytes > MAX_RESPONSE_SIZE - response->size()) {
+        return 0;
+    }
+
+    try {
+        response->append(ptr, bytes);
+    }
+    catch (...) {
+        return 0;
+    }
+
     return bytes;
 }
 
@@ -40,8 +54,8 @@ HttpClient::FetchResult CurlHttpClient::fetchUrl(const std::string& url) {
     );
 
     curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 7L);
 
     CURLcode res = curl_easy_perform(curl);
 
