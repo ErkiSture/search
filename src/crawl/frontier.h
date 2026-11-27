@@ -62,17 +62,21 @@ public:
     std::queue<std::string> frontier_;
 
 private:
+    // Stores all urls waiting for rate limit
     std::unordered_map<std::string, std::queue<std::string>>
         domainWaiting_;
 
+    // Stores all domains and when they are ready
     std::priority_queue<
         DelayedDomain,
         std::vector<DelayedDomain>,
         CompareDomainReadyTime
     > delayedDomains_;
 
+    // Keeps track of which domains already have an entry in delayedDomains_
     std::unordered_set<std::string> domainScheduled_;
 
+    // Stores domains and corresponding urls while waiting for robots.txt
     std::unordered_map<std::string, std::vector<std::string>>
         waitingForRobots_;
 };

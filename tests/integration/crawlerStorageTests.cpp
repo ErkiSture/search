@@ -10,7 +10,7 @@
 #include "processing/pageScorer.h"
 #include "index/indexer.h"
 
-class CrawlerTests : public testing::Test {
+class CrawlerStorageTests : public testing::Test {
 protected:
     std::filesystem::path testDir = "testData";
 
@@ -33,7 +33,7 @@ protected:
     }
 };
 
-TEST_F(CrawlerTests, SavesFetchedPage)
+TEST_F(CrawlerStorageTests, SavesFetchedPage)
 {
     httpClient.responses["https://example.com/robots.txt"] = {
         true, ""
@@ -50,7 +50,7 @@ TEST_F(CrawlerTests, SavesFetchedPage)
     EXPECT_EQ(storage.getStatus("https://example.com"), "fetched");
 }
 
-TEST_F(CrawlerTests, DoesNotSaveFailedPage)
+TEST_F(CrawlerStorageTests, DoesNotSaveFailedPage)
 {
     httpClient.responses["https://example.com/robots.txt"] = {
         true, ""
@@ -67,7 +67,7 @@ TEST_F(CrawlerTests, DoesNotSaveFailedPage)
     EXPECT_EQ(storage.getStatus("https://example.com"), "failed");
 }
 
-TEST_F(CrawlerTests, UrlHasCorrectStatusWhileFetching) {
+TEST_F(CrawlerStorageTests, UrlHasCorrectStatusWhileFetching) {
     httpClient.responses["https://example.com/robots.txt"] = {
         true, ""
     };

@@ -117,6 +117,7 @@ add_executable(tests
     "tests/unit/htmlParserTests.cpp"
     "tests/unit/urlProcessorTests.cpp"
     "tests/unit/storageTests.cpp"
+    "tests/unit/frontierTests.cpp"
 
     src/crawl/domainManager.cpp
     src/processing/robotsTxtParser.cpp
@@ -132,6 +133,7 @@ add_executable(tests
     src/processing/pageScorer.cpp
     src/crawl/frontier.cpp
     src/crawl/crawlPolicy.cpp
+    src/utils/clock.h
 )
 
 target_include_directories(tests PRIVATE

@@ -206,6 +206,11 @@ Crawler::Crawler(
 {
 }
 
+void Crawler::scheduleNextDomainUrl(const std::string& url)
+{
+    auto domain = domainManager_.getDomain(url);
+    frontier_.scheduleNextForDomain(domain, clock_.now());
+}
 
 void Crawler::scheduleRetry(
     const std::string& url,
@@ -285,6 +290,7 @@ std::optional<std::string> Crawler::getNextUrl(
             ++stats.visitedChecks;
 
             if (visited) {
+                scheduleNextDomainUrl(*url);
                 continue;
             }
 
@@ -396,7 +402,15 @@ void Crawler::fetchRobots(
 
         if (!visited) {
             auto pushStart = SteadyClock::now();
-            frontier_.push(url);
+
+            auto domain = domainManager_.getDomain(url);
+            frontier_.schedule(
+                domain,
+                url,
+                domainManager_.nextAllowedRequestTime(url)
+            );
+
+            auto readyAt = domainManager_.nextAllowedRequestTime(url);
 
             stats.frontierPushTime += elapsedSince(pushStart);
             ++stats.frontierPushes;
@@ -407,24 +421,29 @@ void Crawler::fetchRobots(
         auto waitingUrls = frontier_.releaseRobotsWaiters(domain);
 
         for (const auto& waitingUrl : waitingUrls) {
-            visitedStart = SteadyClock::now();
+            //visitedStart = SteadyClock::now();
 
-            visited = timeDatabaseQuery(
-                stats.database.checkVisitedTime,
-                stats.database.checkVisitedCalls,
-                [&] { return storage_.checkVisited(waitingUrl); }
-            );
+            //visited = timeDatabaseQuery(
+            //    stats.database.checkVisitedTime,
+            //    stats.database.checkVisitedCalls,
+            //    [&] { return storage_.checkVisited(waitingUrl); }
+            //);
 
-            stats.visitedCheckTime += elapsedSince(visitedStart);
-            ++stats.visitedChecks;
+            //stats.visitedCheckTime += elapsedSince(visitedStart);
+            //++stats.visitedChecks;
 
-            if (!visited) {
+            //if (!visited) {
                 auto pushStart = SteadyClock::now();
-                frontier_.push(waitingUrl);
+                auto domain = domainManager_.getDomain(waitingUrl);
 
+                frontier_.schedule(
+                    domain,
+                    waitingUrl,
+                    domainManager_.nextAllowedRequestTime(waitingUrl)
+                );
                 stats.frontierPushTime += elapsedSince(pushStart);
                 ++stats.frontierPushes;
-            }
+            //}
         }
 
         recordLockHold(stats, stats.fetchRobotsLock, holdStart);
@@ -515,7 +534,7 @@ void Crawler::fetchPage(
         // Save domain request information.
         domainManager_.saveRequest(url);
 
-        // Schedule the next waiting URL for the domain that just made a request.        auto domain = domainManager_.getDomain(url);
+        // Schedule the next waiting URL for the domain that just made a request.
         auto domain = domainManager_.getDomain(url);
         auto readyAt = domainManager_.nextAllowedRequestTime(url);
         frontier_.scheduleNextForDomain(domain, readyAt);
@@ -725,27 +744,33 @@ void Crawler::processUrl(
 
     switch (status) {
     case RequestStatus::Disallowed:
+        scheduleNextDomainUrl(url);
         ++stats.disallowed;
+        std::cout << "Disallowed: " << url << "\n";
         break;
 
     case RequestStatus::WaitForRobots:
         ++stats.waitForRobots;
+        std::cout << "WWaitForRobots: " << url << "\n";
         break;
 
     case RequestStatus::RateLimited:
         ++stats.rateLimited;
         scheduleRetry(url, stats);
-        std::cout << "Y";
+        std::cout << "Ratelimited: " << url << "\n";
         break;
 
     case RequestStatus::FetchRobots:
         ++stats.fetchRobots;
         fetchRobots(url, stats);
+        std::cout << "FetchRobots: " << url << "\n";
+
         break;
 
     case RequestStatus::Allowed:
         ++stats.allowed;
         fetchPage(url, stats);
+        std::cout << "Allowed: " << url << "\n";
         break;
     }
 }

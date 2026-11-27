@@ -2,6 +2,7 @@
 #include "crawl/domainManager.h"
 #include "utils/systemClock.h"
 #include <chrono>
+#include "fakes/fakeClock.h"
 
 TEST(DomainManagerTest, getRobotsUrl)
 {
@@ -190,24 +191,6 @@ TEST(DomainManagerTest, RequestToSameDomainWhileWaitingReturnsWaitForRobots)
     EXPECT_EQ(domainManager.check("https://example.com"), RequestStatus::WaitForRobots);
     EXPECT_EQ(domainManager.check("https://example.com/private"), RequestStatus::WaitForRobots);
 }
-
-class FakeClock : public Clock {
-public:
-    FakeClock()
-        : time(std::chrono::steady_clock::time_point{})
-    {
-    }
-
-    std::chrono::steady_clock::time_point now() const override {
-        return time;
-    }
-
-    void advance(std::chrono::milliseconds amount) {
-        time += amount;
-    }
-private:
-    std::chrono::steady_clock::time_point time;
-};
 
 TEST(DomainManagerTest, RequestAfterSavedRobotsReturnsPermission)
 {

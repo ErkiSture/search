@@ -10,7 +10,7 @@
 #include "processing/pageScorer.h"
 #include "index/indexer.h"
 
-class CrawlerTests : public testing::Test {
+class CrawlerDomainManagerTests : public testing::Test {
 protected:
     std::filesystem::path testDir = "testData";
 
@@ -33,17 +33,17 @@ protected:
     }
 };
 
-TEST_F(CrawlerTests, SkipsDisallowedUrls) {
+TEST_F(CrawlerDomainManagerTests, SkipsDisallowedUrls) {
     httpClient.responses["https://example.com/robots.txt"] = {
         true,
-        "User-agent:\n"
+        "User-agent: *\n"
         "Disallow: /private\n"
     };
 
     httpClient.responses["https://example.com"] = {
         true,
-        R"(<a href="https://example.com/private">1</a>)"
         R"(<a href="https://example.com/1">1</a>)"
+        R"(<a href="https://example.com/private">1</a>)"
     };
 
     httpClient.responses["https://example.com/private"] = {
@@ -59,5 +59,54 @@ TEST_F(CrawlerTests, SkipsDisallowedUrls) {
     Crawler crawler(storage, domainManager, clock, httpClient, htmlParser, urlProcessor, pageScorer, indexer, 100, 1);
     crawler.run("https://example.com");
 
+    for (std::string url : httpClient.requestedUrls) {
+        std::cout << url << std::endl;
+    }
+
     EXPECT_EQ(httpClient.requestedUrls.size(), 3);
+};
+
+TEST_F(CrawlerDomainManagerTests, ContinuesDomainQueueWhenUrlIsDisallowed)
+{
+    httpClient.responses["https://example.com/robots.txt"] = {
+        true,
+        "User-agent: *\n"
+        "Disallow: /private\n"
+    };
+
+    httpClient.responses["https://example.com"] = {
+        true,
+        R"(<a href="https://example.com/private">Private</a>)"
+        R"(<a href="https://example.com/public">Public</a>)"
+    };
+
+    httpClient.responses["https://example.com/public"] = {
+        true,
+        "<html>Public page</html>"
+    };
+
+    Crawler crawler(
+        storage, domainManager, clock, httpClient,
+        htmlParser, urlProcessor, pageScorer, indexer, 100, 1
+    );
+
+    crawler.run("https://example.com");
+
+    EXPECT_EQ(
+        std::count(
+            httpClient.requestedUrls.begin(),
+            httpClient.requestedUrls.end(),
+            "https://example.com/public"
+        ),
+        1
+    );
+
+    EXPECT_EQ(
+        std::count(
+            httpClient.requestedUrls.begin(),
+            httpClient.requestedUrls.end(),
+            "https://example.com/private"
+        ),
+        0
+    );
 }
