@@ -13,3 +13,4 @@ Release/
 *.user
 Testing/
 vcpkg_installed
+src/experiment/

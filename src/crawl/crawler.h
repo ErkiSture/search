@@ -112,7 +112,7 @@ public:
     void run(const std::string& seedUrl);
 
 private:
-    static constexpr std::size_t INDEX_BATCH_SIZE = 25;
+    static constexpr std::size_t INDEX_BATCH_SIZE = 50;
 
     std::optional<std::string> getNextUrl(
         std::unique_lock<std::mutex>& lock,

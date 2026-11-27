@@ -228,6 +228,7 @@ void Crawler::scheduleRetry(
 
     stats.visitedCheckTime += elapsedSince(visitedStart);
     ++stats.visitedChecks;
+    std::cout << "X\n";
 
     if (visited) {
         recordLockHold(stats, stats.scheduleRetryLock, holdStart);
@@ -235,7 +236,8 @@ void Crawler::scheduleRetry(
     }
 
     auto readyAt = domainManager_.nextAllowedRequestTime(url);
-    frontier_.schedule(url, readyAt);
+    std::string domain = domainManager_.getDomain(url);
+    frontier_.schedule(domain, url, readyAt);
 
     recordLockHold(stats, stats.scheduleRetryLock, holdStart);
 
@@ -441,6 +443,19 @@ void Crawler::flushIndexBatch(WorkerStats& stats)
     // One SQLite transaction writes all pages currently in the batch.
     auto saveStart = SteadyClock::now();
 
+    std::cout << "STARTING savePageIndex\n";
+    auto start = std::chrono::steady_clock::now();
+    std::size_t total;
+    std::size_t totalWords = 0;
+    std::size_t totalPages = pendingIndexBatch_.size();
+
+    for (const auto& [url, pageIndex] : pendingIndexBatch_) {
+        totalWords += pageIndex.size();
+    }
+
+    std::cout << "Pages: " << totalPages << '\n';
+    std::cout << "Postings: " << totalWords << '\n';
+
     timeDatabaseOperation(
         stats.database.savePageIndexTime,
         stats.database.savePageIndexCalls,
@@ -448,6 +463,9 @@ void Crawler::flushIndexBatch(WorkerStats& stats)
             storage_.savePagesIndex(pendingIndexBatch_);
         }
     );
+    auto end = std::chrono::steady_clock::now();
+    double seconds = std::chrono::duration<double>(end - start).count();
+    std::cout << seconds << " seconds\n";
 
     stats.saveIndexTime += elapsedSince(saveStart);
 
@@ -496,6 +514,11 @@ void Crawler::fetchPage(
 
         // Save domain request information.
         domainManager_.saveRequest(url);
+
+        // Schedule the next waiting URL for the domain that just made a request.        auto domain = domainManager_.getDomain(url);
+        auto domain = domainManager_.getDomain(url);
+        auto readyAt = domainManager_.nextAllowedRequestTime(url);
+        frontier_.scheduleNextForDomain(domain, readyAt);
 
         recordLockHold(stats, stats.fetchPageStartLock, holdStart);
     }
@@ -647,28 +670,21 @@ void Crawler::fetchPage(
             }
         }
 
-        // Check and enqueue extracted links.
+        // Enqueue extracted links by domain.
         for (const std::string& link : links) {
             ++stats.linksProcessed;
 
             stageStart = SteadyClock::now();
 
-            bool linkVisited = timeDatabaseQuery(
-                stats.database.checkVisitedTime,
-                stats.database.checkVisitedCalls,
-                [&] { return storage_.checkVisited(link); }
+            auto domain = domainManager_.getDomain(link);
+            frontier_.schedule(
+                domain,
+                link,
+                domainManager_.nextAllowedRequestTime(link)
             );
 
-            stats.visitedCheckTime += elapsedSince(stageStart);
-            ++stats.visitedChecks;
-
-            if (!linkVisited) {
-                stageStart = SteadyClock::now();
-                frontier_.push(link);
-
-                stats.frontierPushTime += elapsedSince(stageStart);
-                ++stats.frontierPushes;
-            }
+            stats.frontierPushTime += elapsedSince(stageStart);
+            ++stats.frontierPushes;
         }
 
         recordLockHold(stats, stats.fetchPageSaveLock, holdStart);
@@ -676,7 +692,6 @@ void Crawler::fetchPage(
 
     cv_.notify_all();
 }
-
 
 void Crawler::processUrl(
     std::string& url,
@@ -691,6 +706,12 @@ void Crawler::processUrl(
         recordLockWait(stats, stats.processUrlLock, waitStart);
 
         auto holdStart = SteadyClock::now();
+
+        // Skip URLs that have already been visited.
+        if (storage_.checkVisited(url)) {
+            recordLockHold(stats, stats.processUrlLock, holdStart);
+            return;
+        }
 
         status = domainManager_.check(url);
 
@@ -714,6 +735,7 @@ void Crawler::processUrl(
     case RequestStatus::RateLimited:
         ++stats.rateLimited;
         scheduleRetry(url, stats);
+        std::cout << "Y";
         break;
 
     case RequestStatus::FetchRobots:
@@ -727,7 +749,6 @@ void Crawler::processUrl(
         break;
     }
 }
-
 
 void Crawler::worker(int workerId)
 {
@@ -762,8 +783,17 @@ void Crawler::worker(int workerId)
         lock.unlock();
 
         auto processStart = SteadyClock::now();
-        processUrl(*url, stats);
-        stats.processing += elapsedSince(processStart);
+        try {
+            processUrl(*url, stats);
+        }
+        catch (const std::exception& e) {
+            std::cerr << "[WORKER " << workerId
+                << "] Exception: " << e.what() << '\n';
+        }
+        catch (...) {
+            std::cerr << "[WORKER " << workerId
+                << "] Unknown exception\n";
+        }        stats.processing += elapsedSince(processStart);
 
         // Decrement active worker count.
         waitStart = SteadyClock::now();
@@ -926,6 +956,19 @@ void Crawler::run(const std::string& seedUrl)
     std::cout << "Domain manager size: "
         << domainManager_.domains_.size() << '\n';
 
+    int cache_size = 0;
+
+    sqlite3_stmt* stmt = nullptr;
+
+    if (sqlite3_prepare_v2(storage_.db_, "PRAGMA cache_size;", -1, &stmt, nullptr) == SQLITE_OK) {
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            cache_size = sqlite3_column_int(stmt, 0);
+        }
+    }
+
+    sqlite3_finalize(stmt);
+
+    std::cout << "SQLite cache_size: " << cache_size << '\n';
     std::cout << "--------------------\n";
     std::cout << "CRAWL END\n";
     std::cout << "--------------------\n";

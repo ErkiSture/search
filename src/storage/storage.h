@@ -61,13 +61,13 @@ public:
 
     void clearDatabase();
 
+    sqlite3* db_ = nullptr;
 private:
     fs::path g_dataDir_;
     fs::path pages_path_;
     fs::path visited_path_;
     fs::path index_path_;
 
-    sqlite3* db_ = nullptr;
 
     // Reusable prepared statements
     sqlite3_stmt* markFetchingStmt_ = nullptr;

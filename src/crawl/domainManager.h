@@ -42,11 +42,22 @@ public:
 
 		std::chrono::milliseconds crawlDelay;
 		std::chrono::steady_clock::time_point lastRequest;
+		std::chrono::steady_clock::time_point nextRequestTime;
 	};
 	std::unordered_map<std::string, DomainState> domains_;
 private:
 	Clock& clock_;
 	std::chrono::milliseconds crawlDelay_;
-
-
 };
+
+
+/*
+
+frontier
+	domainWaiting - waiting for ratelimit
+
+
+
+
+
+*/

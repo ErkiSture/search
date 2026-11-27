@@ -6,18 +6,40 @@ void Frontier::push(const std::string& url)
 }
 
 void Frontier::schedule(
+    const std::string& domain,
     const std::string& url,
     std::chrono::steady_clock::time_point readyAt)
 {
-    delayed_.push({ readyAt, url });
+    domainWaiting_[domain].push(url);
+
+    if (domainScheduled_.insert(domain).second) {
+        delayedDomains_.push({ readyAt, domain });
+    }
 }
 
 void Frontier::promoteReadyUrls(
     std::chrono::steady_clock::time_point now)
 {
-    while (!delayed_.empty() && delayed_.top().readyAt <= now) {
-        frontier_.push(delayed_.top().url);
-        delayed_.pop();
+    while (!delayedDomains_.empty() &&
+        delayedDomains_.top().readyAt <= now)
+    {
+        auto delayed = delayedDomains_.top();
+        delayedDomains_.pop();
+
+        const std::string& domain = delayed.domain;
+
+        domainScheduled_.erase(domain);
+
+        auto& urls = domainWaiting_[domain];
+
+        if (!urls.empty()) {
+            frontier_.push(urls.front());
+            urls.pop();
+        }
+
+        if (urls.empty()) {
+            domainWaiting_.erase(domain);
+        }
     }
 }
 
@@ -41,16 +63,32 @@ std::optional<std::string> Frontier::tryGetNextUrl()
 std::optional<std::chrono::steady_clock::time_point>
 Frontier::nextReadyAt() const
 {
-    if (delayed_.empty()) {
+    if (delayedDomains_.empty()) {
         return std::nullopt;
     }
 
-    return delayed_.top().readyAt;
+    return delayedDomains_.top().readyAt;
+}
+
+void Frontier::scheduleNextForDomain(
+    const std::string& domain,
+    std::chrono::steady_clock::time_point readyAt)
+{
+    auto it = domainWaiting_.find(domain);
+
+    if (it == domainWaiting_.end() || it->second.empty()) {
+        return;
+    }
+
+    if (domainScheduled_.insert(domain).second) {
+        delayedDomains_.push({ readyAt, domain });
+    }
 }
 
 bool Frontier::empty() const
 {
-    return frontier_.empty();
+    return frontier_.empty() && delayedDomains_.empty()
+        && domainWaiting_.empty();
 }
 
 std::size_t Frontier::frontierSize() const
@@ -60,7 +98,7 @@ std::size_t Frontier::frontierSize() const
 
 std::size_t Frontier::delayedSize() const
 {
-    return delayed_.size();
+    return delayedDomains_.size();
 }
 
 std::size_t Frontier::robotsWaitingSize() const
