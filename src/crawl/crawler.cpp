@@ -263,14 +263,11 @@ std::optional<std::string> Crawler::getNextUrl(
         };
 
     while (true) {
-        // Read the saved count only once.
-        std::size_t saved = savedCount_.load(
-            std::memory_order_relaxed
-        );
+        const std::size_t fetched =
+            savedCount_.load(std::memory_order_relaxed);
 
-        // A negative maxPages_ means unlimited.
         if (maxPages_ >= 0 &&
-            saved >= static_cast<std::size_t>(maxPages_)) {
+            fetched >= static_cast<std::size_t>(maxPages_)) {
             finishHold();
             return std::nullopt;
         }
@@ -421,29 +418,17 @@ void Crawler::fetchRobots(
         auto waitingUrls = frontier_.releaseRobotsWaiters(domain);
 
         for (const auto& waitingUrl : waitingUrls) {
-            //visitedStart = SteadyClock::now();
 
-            //visited = timeDatabaseQuery(
-            //    stats.database.checkVisitedTime,
-            //    stats.database.checkVisitedCalls,
-            //    [&] { return storage_.checkVisited(waitingUrl); }
-            //);
+            auto pushStart = SteadyClock::now();
+            auto domain = domainManager_.getDomain(waitingUrl);
 
-            //stats.visitedCheckTime += elapsedSince(visitedStart);
-            //++stats.visitedChecks;
-
-            //if (!visited) {
-                auto pushStart = SteadyClock::now();
-                auto domain = domainManager_.getDomain(waitingUrl);
-
-                frontier_.schedule(
-                    domain,
-                    waitingUrl,
-                    domainManager_.nextAllowedRequestTime(waitingUrl)
-                );
-                stats.frontierPushTime += elapsedSince(pushStart);
-                ++stats.frontierPushes;
-            //}
+            frontier_.schedule(
+                domain,
+                waitingUrl,
+                domainManager_.nextAllowedRequestTime(waitingUrl)
+            );
+            stats.frontierPushTime += elapsedSince(pushStart);
+            ++stats.frontierPushes;
         }
 
         recordLockHold(stats, stats.fetchRobotsLock, holdStart);
@@ -508,21 +493,21 @@ void Crawler::fetchPage(
         auto holdStart = SteadyClock::now();
 
         // Check whether URL has already been visited.
-        auto visitedStart = SteadyClock::now();
+        //auto visitedStart = SteadyClock::now();
 
-        bool visited = timeDatabaseQuery(
-            stats.database.checkVisitedTime,
-            stats.database.checkVisitedCalls,
-            [&] { return storage_.checkVisited(url); }
-        );
+        //bool visited = timeDatabaseQuery(
+        //    stats.database.checkVisitedTime,
+        //    stats.database.checkVisitedCalls,
+        //    [&] { return storage_.checkVisited(url); }
+        //);
 
-        stats.visitedCheckTime += elapsedSince(visitedStart);
-        ++stats.visitedChecks;
+        //stats.visitedCheckTime += elapsedSince(visitedStart);
+        //++stats.visitedChecks;
 
-        if (visited) {
-            recordLockHold(stats, stats.fetchPageStartLock, holdStart);
-            return;
-        }
+        //if (visited) {
+        //    recordLockHold(stats, stats.fetchPageStartLock, holdStart);
+        //    return;
+        //}
 
         // Mark URL as fetching.
         timeDatabaseOperation(
@@ -655,11 +640,6 @@ void Crawler::fetchPage(
             [&] { storage_.markFetched(url); }
         );
 
-        savedCount_.fetch_add(
-            1,
-            std::memory_order_relaxed
-        );
-
         // Save page content.
         stageStart = SteadyClock::now();
 
@@ -675,6 +655,7 @@ void Crawler::fetchPage(
                 );
             }
         );
+        savedCount_.fetch_add(1, std::memory_order_relaxed);
 
         stats.saveContentTime += elapsedSince(stageStart);
 
@@ -726,37 +707,37 @@ void Crawler::processUrl(
 
         auto holdStart = SteadyClock::now();
 
-        // Skip URLs that have already been visited.
-        if (storage_.checkVisited(url)) {
-            recordLockHold(stats, stats.processUrlLock, holdStart);
-            return;
-        }
-
         status = domainManager_.check(url);
-
-        if (status == RequestStatus::WaitForRobots) {
-            std::string domain = domainManager_.getDomain(url);
-            frontier_.waitForRobots(domain, url);
-        }
 
         recordLockHold(stats, stats.processUrlLock, holdStart);
     }
 
     switch (status) {
     case RequestStatus::Disallowed:
-        scheduleNextDomainUrl(url);
         ++stats.disallowed;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            scheduleNextDomainUrl(url);
+        }
         std::cout << "Disallowed: " << url << "\n";
         break;
 
     case RequestStatus::WaitForRobots:
         ++stats.waitForRobots;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            std::string domain = domainManager_.getDomain(url);
+            frontier_.waitForRobots(domain, url);
+        }
         std::cout << "WWaitForRobots: " << url << "\n";
         break;
 
     case RequestStatus::RateLimited:
         ++stats.rateLimited;
-        scheduleRetry(url, stats);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            scheduleRetry(url, stats);
+        }
         std::cout << "Ratelimited: " << url << "\n";
         break;
 
@@ -842,10 +823,7 @@ void Crawler::run(const std::string& seedUrl)
 {
     storage_.loadFrontier(frontier_);
 
-    savedCount_.store(
-        storage_.countSaved(),
-        std::memory_order_relaxed
-    );
+    savedCount_.store(0, std::memory_order_relaxed);
 
     {
         std::lock_guard<std::mutex> lock(mutex_);

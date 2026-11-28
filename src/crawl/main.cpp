@@ -18,7 +18,7 @@
 #include"processing/htmlParser.h"
 #include <cstdlib>
 
-constexpr int WORKER_COUNT = 1;
+constexpr int WORKER_COUNT = 100;
 
 int main(int argc, char** argv) {
 
