@@ -21,33 +21,6 @@ else()
     set(LEXBOR_TARGET lexbor::lexbor_static)
 endif()
 
-add_executable(bench
-    src/experiment/main.cpp
-    src/crawl/crawler.cpp
-    src/index/indexer.cpp
-    src/storage/storage.cpp
-    src/net/fetcher.cpp
-    src/crawl/domainManager.cpp
-    src/processing/robotsTxtParser.cpp
-    src/net/curlHttpClient.cpp
-    src/query/querier.cpp
-    src/processing/htmlParser.cpp
-    src/processing/urlProcessor.cpp
-    src/processing/pageScorer.cpp
-    src/crawl/frontier.cpp
-    src/crawl/crawlPolicy.cpp
-)
-
-target_include_directories(bench PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-
-target_link_libraries(bench PRIVATE 
-    CURL::libcurl
-    unofficial::sqlite3::sqlite3
-    ${LEXBOR_TARGET}
-)
-
 add_executable(search
     src/main.cpp
     "src/net/fetcher.cpp"
