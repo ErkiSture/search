@@ -139,7 +139,7 @@ private:
         WorkerStats& stats
     );
 
-    void Crawler::scheduleNextDomainUrl(const std::string& url);
+    void scheduleNextDomainUrl(const std::string& url);
 
     int workerCount_ = 0;
     int activeWorkers = 0;
