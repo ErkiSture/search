@@ -9,6 +9,7 @@
 #include <filesystem>
 #include "processing/pageScorer.h"
 #include "index/indexer.h"
+#include <algorithm>
 
 class CrawlerDomainManagerTests : public testing::Test {
 protected:
